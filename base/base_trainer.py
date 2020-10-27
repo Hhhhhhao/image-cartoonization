@@ -21,19 +21,16 @@ class BaseTrainer:
         # setup GPU device if available, move model into configured device
         self.device, self.device_ids = self._prepare_device(config.n_gpu)
 
-        # add early stop monitor
-        self.monitor = config.monitor
-        self.mnt_mode, self.mnt_metric = self.monitor.split()
-        assert self.mnt_mode in ['min', 'max']
 
-        self.mnt_best = inf if self.mnt_mode == 'min' else -inf
-        self.early_stop = config.early_stop
+        # setup visualization writer instance
+        self.logger.info("Creating tensorboard writer...")
+        self.writer = TensorboardWriter(config.summary_dir, self.logger, config.tensorboard)
 
     def _build_model(self):
         """ build model """
         raise NotImplementedError
 
-    def _build_optimizer(self, generator):
+    def _build_optimizer(self, *kwargs):
         """ build optimizer """
         raise NotImplementedError
 
@@ -63,7 +60,6 @@ class BaseTrainer:
         """
         Full training logic
         """
-        not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
 
@@ -75,33 +71,10 @@ class BaseTrainer:
             for key, value in log.items():
                 self.logger.info('    {:15s}: {}'.format(str(key), value))
 
-            # evaluate model performance according to configured metric, save best checkpoint as model_best
-            best = False
-            if self.mnt_mode != 'off':
-                try:
-                    # check whether model performance improved or not, according to specified metric(mnt_metric)
-                    improved = (self.mnt_mode == 'min' and log[self.mnt_metric] <= self.mnt_best) or \
-                               (self.mnt_mode == 'max' and log[self.mnt_metric] >= self.mnt_best)
-                except KeyError:
-                    self.logger.warning("Warning: Metric '{}' is not found. "
-                                        "Model performance monitoring is disabled.".format(self.mnt_metric))
-                    self.mnt_mode = 'off'
-                    improved = False
-
-                if improved:
-                    self.mnt_best = log[self.mnt_metric]
-                    not_improved_count = 0
-                    best = True
-                else:
-                    not_improved_count += 1
-
-                if not_improved_count > self.early_stop:
-                    self.logger.info("Validation performance didn\'t improve for {} epochs. "
-                                     "Training stops.".format(self.early_stop))
-                    break
-
+            # save checkpoint
             if epoch % self.save_period == 0:
-                self._save_checkpoint(epoch, save_best=best)
+                self._save_checkpoint(epoch)
+
 
     def _prepare_device(self, n_gpu_use):
         """
@@ -121,7 +94,7 @@ class BaseTrainer:
         list_ids = list(range(n_gpu_use))
         return device, list_ids
 
-    def _save_checkpoint(self, epoch, save_best=False):
+    def _save_checkpoint(self, epoch):
         """
         Saving checkpoints
 
@@ -146,10 +119,6 @@ class BaseTrainer:
             torch.save(state, filename)
             self.logger.info("Saving checkpoint: {} ...".format(filename))
 
-        if save_best:
-            best_path = str(self.config.checkpoint_dir + 'best.pth')
-            torch.save(state, best_path)
-            self.logger.info("Saving current best: best.pth ...")
 
     def _resume_checkpoint(self, resume_path):
         """

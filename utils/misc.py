@@ -34,7 +34,6 @@ def write_pickle(content, fname):
         pickle.dump(content, f)
 
 
-
 def denormalize(tensor, mean, std):
     if not tensor.ndimension() == 4:
         raise TypeError('tensor should be 4D')

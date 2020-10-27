@@ -19,13 +19,18 @@ def get_config(manual=None):
     # train options
     parser.add_argument('--epochs', default=30, type=int, help='number of epochs for training the model')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
-    parser.add_argument('--lr', default=1e-3, type=float, help='generator learning rate')
-    parser.add_argument('--weight-decay', default=1e-3, type=float, help='weight decay for optimizers')
-    parser.add_argument('--monitor', default='max val_cls_acc', help='monitor metric for early stopping')
+    parser.add_argument('--g-lr', default=1e-3, type=float, help='generator learning rate')
+    parser.add_argument('--d-lr', default=1e-3, type=float, help='discriminator learning rate')
+    parser.add_argument('--weight-decay', default=1e-4, type=float, help='weight decay for optimizers')
+    parser.add_argument('--monitor', default=None, help='monitor metric for early stopping')
     parser.add_argument('--early-stop', type=int, default=5, help='early stopping metric')
+    parser.add_argument('--adv-criterion', type=str, default='LSGAN', help='adversarial loss type')
 
     # model options
-
+    parser.add_argument('--image-size', default=256, type=int, help='input size')
+    parser.add_argument('--down-size', default=64, type=int, help='downsample size')
+    parser.add_argument('--num-res', default=)
+    parser.add_argument('--skip-conn', default=False, action='store_true', help="flag of using skip connection in generator")
     return parser.parse_args(manual)
 
 
