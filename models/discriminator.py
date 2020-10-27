@@ -1,6 +1,6 @@
 import torch.nn as nn
-import torch.nn.functional as F
-from .utils import InstanceNormalization
+import math
+from utils import InstanceNorm
 
 __all__ = ['Discriminator']
 
@@ -9,40 +9,50 @@ class Discriminator(nn.Module):
     """
     CartoonGAN Discriminator
     """
-    def __init__(self):
+    def __init__(self, image_size=256, down_size=64):
         super(Discriminator, self).__init__()
-        self.conv_1 = nn.Conv2d(3, 32, 3, 1)
-        # leak_relu
 
-        self.conv_2_1 = nn.Conv2d(32, 64, 3, 2, 1)
-        # leak_relu
-        self.conv_2_2 = nn.Conv2d(64, 128, 3, 1, 1)
-        self.in_2 = InstanceNormalization(128)
-        # leak_relu
+        self.image_size = image_size
+        self.down_size = down_size
+        self.num_down = int(math.log2(self.image_size // self.down_size))
 
-        self.conv_3_1 = nn.Conv2d(128, 128, 3, 2, 1)
-        # leak_relu
-        self.conv_3_2 = nn.Conv2d(128, 256, 3, 1, 1)
-        self.in_3 = InstanceNormalization(256)
-        # leak_relu
+        self.conv_in = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            InstanceNorm(32),
+            nn.LeakyReLU(negative_slope=0.1),
+        )
 
-        self.conv_4 = nn.Conv2d(256, 256, 3, 1, 1)
-        self.in_4 = InstanceNormalization(256)
-        # leak_relu
+        feat_dim = 32
+        down_layers = []
+        for i in range(self.num_down):
+            down_layers.append(nn.Sequential(
+                nn.Conv2d(feat_dim, feat_dim * 2, kernel_size=3, stride=2, padding=1),
+                InstanceNorm(feat_dim * 2),
+                nn.LeakyReLU(negative_slope=0.1),
+                nn.Conv2d(feat_dim * 2, feat_dim * 4, kernel_size=3, stride=1, padding=1),
+                InstanceNorm(feat_dim * 4),
+                nn.LeakyReLU(negative_slope=0.1)
+            ))
+            feat_dim = feat_dim * 4
+        self.conv_down = nn.Sequential(*down_layers)
 
-        self.conv5 = nn.Conv2d(256, 1, 3, 1, 1)
+        self.conv_out = nn.Sequential(
+            nn.Conv2d(feat_dim, feat_dim, kernel_size=3, padding=1),
+            InstanceNorm(feat_dim),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Conv2d(feat_dim, 1, kernel_size=1, padding=0)
+        )
 
     def forward(self, x):
-        x = F.leaky_relu(self.conv_1(x), negative_slope=0.2)
+        out = self.conv_in(x)
+        out = self.conv_down(out)
+        out = self.conv_out(out)
+        return out
 
-        x = F.leaky_relu(self.conv_2_1(x), negative_slope=0.2)
-        x = F.leaky_relu(self.in_2(self.conv_2_2(x)), negative_slope=0.2)
 
-        x = F.leaky_relu(self.conv_3_1(x), negative_slope=0.2)
-        x = F.leaky_relu(self.in_3(self.conv_3_2(x)), negative_slope=0.2)
-
-        x = F.leaky_relu(self.in_4(self.conv_4(x)), negative_slope=0.2)
-
-        x = self.conv5(x)
-
-        return x
+if __name__ == '__main__':
+    import torch
+    model = Discriminator()
+    a = torch.randn((4, 3, 256, 256))
+    out = model(a)
+    print(out.shape)

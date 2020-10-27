@@ -1,168 +1,134 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from .utils import InstanceNormalization
+import math
+from .utils import InstanceNorm
+
+
+class ResConv(nn.Module):
+    def __init__(self, in_dim, out_dim, kernel_size):
+        super(ResConv, self).__init__()
+        padding = kernel_size // 2
+
+        self.pad1 = nn.ReflectionPad2d(padding)
+        self.conv1 = nn.Conv2d(in_dim, out_dim, kernel_size)
+        self.norm1 = InstanceNorm(out_dim)
+        self.act1 = nn.ReLU(inplace=True)
+
+        self.pad2 = nn.ReflectionPad2d(padding)
+        self.conv2 = nn.Conv2d(in_dim, out_dim, kernel_size)
+        self.norm2 = InstanceNorm(out_dim)
+        self.act2 = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        identity = x
+
+        out = self.pad1(x)
+        out = self.conv1(out)
+        out = self.norm1(out)
+        out = self.act1(out)
+
+        out = self.pad2(out)
+        out = self.conv2(out)
+        out = self.norm2(out)
+
+        out += identity
+        out = self.act2(out)
+        return out
 
 
 class Generator(nn.Module):
-    """
-    CartoonGAN Generator
-    """
-    def __init__(self):
+    def __init__(self, image_size=256, down_size=64, num_res=8, skip_conn=False):
         super(Generator, self).__init__()
+        self.image_size = image_size
+        self.down_size = down_size
+        self.num_res = num_res
+        self.num_down = int(math.log2(self.image_size // self.down_size))
+        self.skip_conn = skip_conn
 
-        """Down Convolution"""
-        self.refpad0_1_1 = nn.ReflectionPad2d(3)
-        self.conv0_1_1 = nn.Conv2d(3, 64, 7)
-        self.in0_1_1 = InstanceNormalization(64)
-        # relu
-        # [H, W]
+        # input layer
+        self.conv_in = nn.Sequential(
+            nn.ReflectionPad2d(2),
+            nn.Conv2d(3, 64, kernel_size=5),
+            InstanceNorm(64),
+            nn.ReLU(inplace=True))
 
-        self.conv0_2_1 = nn.Conv2d(64, 128, 3, 2, 1)
-        self.conv0_2_2 = nn.Conv2d(128, 128, 3, 1, 1)
-        self.in0_2_1 = InstanceNormalization(128)
-        # relu
-        # [H/2, W/2]
+        # downsample layers
+        feat_dim = 64
+        self.down_layers = nn.ModuleList()
+        for i in range(self.num_down):
+            next_feat_dim = feat_dim * 2
+            self.down_layers.append(nn.Sequential(
+                nn.Conv2d(feat_dim, next_feat_dim, kernel_size=3, stride=2, padding=1),
+                InstanceNorm(next_feat_dim),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(next_feat_dim, next_feat_dim, kernel_size=3, stride=1, padding=1),
+                InstanceNorm(next_feat_dim),
+                nn.ReLU(inplace=True)
+            ))
+            feat_dim = next_feat_dim
 
-        self.conv0_3_1 = nn.Conv2d(128, 256, 3, 2, 1)
-        self.conv0_3_2 = nn.Conv2d(256, 256, 3, 1, 1)
-        self.in0_3_1 = InstanceNormalization(256)
-        # relu
-        # [H/4, W/4]
+        # residual layers
+        res_layers = []
+        for i in range(self.num_res):
+            res_layers.append(ResConv(feat_dim, feat_dim, 3))
+        self.res_layers = nn.Sequential(*res_layers)
 
-        """Residual Blocks"""
-        self.refpad0_4_1 = nn.ReflectionPad2d(1)
-        self.conv0_4_1 = nn.Conv2d(256, 256, 3)
-        self.in0_4_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_4_2 = nn.ReflectionPad2d(1)
-        self.conv0_4_2 = nn.Conv2d(256, 256, 3)
-        self.in0_4_2 = InstanceNormalization(256)
-        # + input
+        # upsample layers
+        self.up_layers = nn.ModuleList()
+        for i in range(self.num_down):
+            next_feat_dim = feat_dim // 2
+            self.up_layers.append(nn.Sequential(
+                nn.ConvTranspose2d(feat_dim * 2 if self.skip_conn else feat_dim, next_feat_dim, kernel_size=3, stride=2, padding=1, output_padding=1),
+                InstanceNorm(next_feat_dim),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose2d(next_feat_dim, next_feat_dim, kernel_size=3, stride=1, padding=1),
+                InstanceNorm(next_feat_dim),
+                nn.ReLU(inplace=True)
+            ))
+            feat_dim = next_feat_dim
 
-        self.refpad0_5_1 = nn.ReflectionPad2d(1)
-        self.conv0_5_1 = nn.Conv2d(256, 256, 3)
-        self.in0_5_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_5_2 = nn.ReflectionPad2d(1)
-        self.conv0_5_2 = nn.Conv2d(256, 256, 3)
-        self.in0_5_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_6_1 = nn.ReflectionPad2d(1)
-        self.conv0_6_1 = nn.Conv2d(256, 256, 3)
-        self.in0_6_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_6_2 = nn.ReflectionPad2d(1)
-        self.conv0_6_2 = nn.Conv2d(256, 256, 3)
-        self.in0_6_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_7_1 = nn.ReflectionPad2d(1)
-        self.conv0_7_1 = nn.Conv2d(256, 256, 3)
-        self.in0_7_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_7_2 = nn.ReflectionPad2d(1)
-        self.conv0_7_2 = nn.Conv2d(256, 256, 3)
-        self.in0_7_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_8_1 = nn.ReflectionPad2d(1)
-        self.conv0_8_1 = nn.Conv2d(256, 256, 3)
-        self.in0_8_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_8_2 = nn.ReflectionPad2d(1)
-        self.conv0_8_2 = nn.Conv2d(256, 256, 3)
-        self.in0_8_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_9_1 = nn.ReflectionPad2d(1)
-        self.conv0_9_1 = nn.Conv2d(256, 256, 3)
-        self.in0_9_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_9_2 = nn.ReflectionPad2d(1)
-        self.conv0_9_2 = nn.Conv2d(256, 256, 3)
-        self.in0_9_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_10_1 = nn.ReflectionPad2d(1)
-        self.conv0_10_1 = nn.Conv2d(256, 256, 3)
-        self.in0_10_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_10_2 = nn.ReflectionPad2d(1)
-        self.conv0_10_2 = nn.Conv2d(256, 256, 3)
-        self.in0_10_2 = InstanceNormalization(256)
-        # + input
-
-        self.refpad0_11_1 = nn.ReflectionPad2d(1)
-        self.conv0_11_1 = nn.Conv2d(256, 256, 3)
-        self.in0_11_1 = InstanceNormalization(256)
-        # relu
-        self.refpad0_11_2 = nn.ReflectionPad2d(1)
-        self.conv0_11_2 = nn.Conv2d(256, 256, 3)
-        self.in0_11_2 = InstanceNormalization(256)
-        # + input
-
-        """UP Deconvolution"""
-        self.deconv0_12_1 = nn.ConvTranspose2d(256, 128, 3, 2, 1, 1)
-        self.deconv0_12_2 = nn.ConvTranspose2d(128, 128, 3, 1, 1)
-        self.in0_12_1 = InstanceNormalization(128)
-        # relu
-
-        self.deconv0_13_1 = nn.ConvTranspose2d(128, 64, 3, 2, 1, 1)
-        self.deconv0_13_2 = nn.ConvTranspose2d(64, 64, 3, 1, 1)
-        self.in0_13_1 = InstanceNormalization(64)
-        # relu
-
-        self.refpad0_14_1 = nn.ReflectionPad2d(3)
-        self.deconv0_14_1 = nn.Conv2d(64, 3, 7)
-        # tanh
+        # output layer
+        self.conv_out = nn.Sequential(
+            nn.ReflectionPad2d(2),
+            nn.Conv2d(64, 3, kernel_size=5),
+            nn.Tanh())
 
     def forward(self, x):
-        y = F.relu(self.in0_1_1(self.conv0_1_1(self.refpad0_1_1(x))))
-        y = F.relu(self.in0_2_1(self.conv0_2_2(self.conv0_2_1(y))))
-        t04 = F.relu(self.in0_3_1(self.conv0_3_2(self.conv0_3_1(y))))
 
-        """"""
-        y = F.relu(self.in0_4_1(self.conv0_4_1(self.refpad0_4_1(t04))))
-        t05 = self.in0_4_2(self.conv0_4_2(self.refpad0_4_2(y))) + t04
+        out = self.conv_in(x)
 
-        y = F.relu(self.in0_5_1(self.conv0_5_1(self.refpad0_5_1(t05))))
-        t06 = self.in0_5_2(self.conv0_5_2(self.refpad0_5_2(y))) + t05
+        down = []
+        for down_layer in self.down_layers:
+            out = down_layer(out)
+            down.append(out)
+        down = down[::-1]
 
-        y = F.relu(self.in0_6_1(self.conv0_6_1(self.refpad0_6_1(t06))))
-        t07 = self.in0_6_2(self.conv0_6_2(self.refpad0_6_2(y))) + t06
+        out = self.res_layers(out)
 
-        y = F.relu(self.in0_7_1(self.conv0_7_1(self.refpad0_7_1(t07))))
-        t08 = self.in0_7_2(self.conv0_7_2(self.refpad0_7_2(y))) + t07
+        for i, up_layer in enumerate(self.up_layers):
+            if self.skip_conn:
+                en = down[i]
+                out = torch.cat([out, en], dim=1)
+            out = up_layer(out)
 
-        y = F.relu(self.in0_8_1(self.conv0_8_1(self.refpad0_8_1(t08))))
-        t09 = self.in0_8_2(self.conv0_8_2(self.refpad0_8_2(y))) + t08
-
-        y = F.relu(self.in0_9_1(self.conv0_9_1(self.refpad0_9_1(t09))))
-        t10 = self.in0_9_2(self.conv0_9_2(self.refpad0_9_2(y))) + t09
-
-        y = F.relu(self.in0_10_1(self.conv0_10_1(self.refpad0_10_1(t10))))
-        t11 = self.in0_10_2(self.conv0_10_2(self.refpad0_10_2(y))) + t10
-
-        y = F.relu(self.in0_11_1(self.conv0_11_1(self.refpad0_11_1(t11))))
-        y = self.in0_11_2(self.conv0_11_2(self.refpad0_11_2(y))) + t11
-        """"""
-
-        y = F.relu(self.in0_12_1(self.deconv0_12_2(self.deconv0_12_1(y))))
-        y = F.relu(self.in0_13_1(self.deconv0_13_2(self.deconv0_13_1(y))))
-        y = torch.tanh(self.deconv0_14_1(self.refpad0_14_1(y)))
-
-        return y
+        out = self.conv_out(out)
+        return out
 
 
-class GeneratorCopy(nn.Module):
-    def __init__(self, image_size=256, down_size=64, num_res=8):
+if __name__ == '__main__':
+    model = Generator(skip_conn=True)
+    a = torch.randn((4, 3, 256, 256))
+    out = model(a)
 
-        self.image_size = 256
-        self.down_size = 64
+
+
+
 
         
+
+
+
+
 
 
 

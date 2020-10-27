@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class InstanceNormalization(nn.Module):
+class InstanceNorm(nn.Module):
     """
     Instance Normalization
     """
     def __init__(self, dim, eps=1e-9):
-        super(InstanceNormalization, self).__init__()
+        super(InstanceNorm, self).__init__()
         self.scale = nn.Parameter(torch.FloatTensor(dim))
         self.shift = nn.Parameter(torch.FloatTensor(dim))
         self.eps = eps
