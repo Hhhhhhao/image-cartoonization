@@ -1,6 +1,6 @@
 import torch.nn as nn
 import math
-from utils import InstanceNorm
+from .utils import InstanceNorm
 
 __all__ = ['Discriminator']
 

@@ -38,7 +38,7 @@ class CartoonDataLoader(BaseDataLoader):
             num_workers=num_workers,
             drop_last=True)
 
-    def shuffle(self):
+    def shuffle_dataset(self):
         self.dataset._shuffle_data()
 
 

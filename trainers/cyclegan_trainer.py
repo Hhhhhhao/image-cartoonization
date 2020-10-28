@@ -4,8 +4,8 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from utils import MetricTracker, TensorboardWriter
-from utils.misc import Normalize
+from data_loaders import CartoonDataLoader
+from utils import MetricTracker
 
 
 class CycleGANTrainer(BaseTrainer):
@@ -43,8 +43,15 @@ class CycleGANTrainer(BaseTrainer):
         self._build_metrics()
 
     def _build_dataloader(self):
-        # TODO: implement this
-        pass
+        train_dataloader = CartoonDataLoader(
+            data_dir=self.config.data_dir,
+            src_style='real',
+            tar_style=self.config.tar_style,
+            batch_size=self.config.batch_size,
+            image_size=self.config.image_size,
+            num_workers=self.config.num_workers)
+        valid_dataloader = train_dataloader.split_validation()
+        return train_dataloader, valid_dataloader
 
     def _build_model(self):
         """ build generator and discriminator model """
@@ -69,7 +76,7 @@ class CycleGANTrainer(BaseTrainer):
         return gen_optim, disc_optim
 
     def _build_criterion(self):
-        self.adv_criterion = eval('{}Loss')()
+        self.adv_criterion = eval('{}Loss'.format(self.config.adv_criterion))()
         self.cyc_criterion = torch.nn.MSELoss()
 
     def _build_metrics(self):
@@ -128,9 +135,8 @@ class CycleGANTrainer(BaseTrainer):
             rec_tar_loss = self.cyc_criterion(rec_tar_imgs, tar_imgs)
 
             # total generator loss
-            # TODO: add lambdas
-            gen_src_loss = disc_tar_loss + rec_src_loss
-            gen_tar_loss = disc_src_loss + rec_tar_loss
+            gen_src_loss = self.config.lambda_adv * disc_tar_loss + self.config.lambda_rec * rec_src_loss
+            gen_tar_loss = self.config.lambda_adv * disc_src_loss + self.config.lambda_rec * rec_tar_loss
             gen_loss = gen_src_loss + gen_tar_loss
             gen_loss.backward()
             self.gen_optim.step()
@@ -143,15 +149,18 @@ class CycleGANTrainer(BaseTrainer):
             self.train_metrics.update('gen_tar_src', gen_tar_loss.item())
 
             if batch_idx % self.log_step == 0:
-                self.logger.info('Train Epoch: {:d} {:d} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
+                self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
                     epoch,
                     self._progress(batch_idx),
                     disc_loss.item(),
                     gen_loss.item()))
+                break
 
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
         log.update(**{'val_'+k : v for k, v in val_log.items()})
+        # shuffle data loader
+        self.train_dataloader.shuffle_dataset()
         return log
 
     def _valid_epoch(self, epoch):
@@ -205,14 +214,16 @@ class CycleGANTrainer(BaseTrainer):
                 rec_src_loss = self.cyc_criterion(rec_src_imgs, src_imgs)
                 rec_tar_loss = self.cyc_criterion(rec_tar_imgs, tar_imgs)
 
-                # TODO: add lambdas
-                gen_src_loss = disc_tar_loss_ + rec_src_loss
-                gen_tar_loss = disc_src_loss_ + rec_tar_loss
+                gen_src_loss = self.config.lambda_adv * disc_tar_loss + self.config.lambda_rec * rec_src_loss
+                gen_tar_loss = self.config.lambda_adv * disc_src_loss + self.config.lambda_rec * rec_tar_loss
 
                 disc_src_losses.append(disc_src_loss.item())
                 disc_tar_losses.append(disc_tar_loss.item())
                 gen_src_tar_losses.append(gen_src_loss.item())
                 gen_tar_src_losses.append(gen_tar_loss.item())
+
+                if batch_idx == 2:
+                    break
 
             # log losses
             self.writer.set_step(epoch)
@@ -227,3 +238,52 @@ class CycleGANTrainer(BaseTrainer):
             tar_src_imgs = torch.cat([tar_imgs.cpu(), fake_src_imgs.cpu()], dim=-1)
             self.writer.add_image('tar2src', make_grid(tar_src_imgs.cpu(), nrow=1, normalize=True))
         return self.valid_metrics.result()
+
+    def _save_checkpoint(self, epoch):
+        """
+        Saving checkpoints
+
+        :param epoch: current epoch number
+        :param log: logging information of the epoch
+        :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
+        """
+        state = {
+            'epoch': epoch,
+            'gen_src_tar_state_dict': self.gen_src_tar.state_dict() if len(self.device_ids) <= 1 else self.gen_src_tar.module.state_dict(),
+            'gen_tar_src_state_dict': self.gen_tar_src.state_dict() if len(self.device_ids) <= 1 else self.gen_tar_src.module.state_dict(),
+            'disc_src_state_dict': self.disc_src.state_dict() if len(self.device_ids) <= 1 else self.disc_src.module.state_dict(),
+            'disc_tar_state_dict': self.disc_tar.state_dict() if len(self.device_ids) <= 1 else self.disc_tar.module.state_dict(),
+            'gen_optim': self.gen_optim.state_dict(),
+            'disc_optim': self.disc_optim.state_dict()
+        }
+        filename = str(self.config.checkpoint_dir + 'current.pth')
+        torch.save(state, filename)
+        self.logger.info("Saving checkpoint: {} ...".format(filename))
+
+        if epoch % self.save_period == 0:
+            filename = str(self.config.checkpoint_dir + 'epoch{}.pth'.format(epoch))
+            torch.save(state, filename)
+            self.logger.info("Saving checkpoint: {} ...".format(filename))
+
+    def _resume_checkpoint(self, resume_path):
+        """
+        Resume from saved checkpoints
+
+        :param resume_path: Checkpoint path to be resumed
+        """
+        resume_path = str(resume_path)
+        self.logger.info("Loading checkpoint: {} ...".format(resume_path))
+        checkpoint = torch.load(resume_path)
+        self.start_epoch = checkpoint['epoch'] + 1
+
+        # load architecture params from checkpoint.
+        self.gen_src_tar.load_state_dict(checkpoint['gen_src_tar_state_dict'])
+        self.gen_tar_src.load_state_dict(checkpoint['gen_tar_src_state_dict'])
+        self.disc_src.load_state_dict(checkpoint['disc_src_state_dict'])
+        self.disc_tar.load_state_dict(checkpoint['disc_tar_state_dict'])
+
+        # load optimizer state from checkpoint only when optimizer type is not changed.
+        self.gen_optim.load_state_dict(checkpoint['gen_optim'])
+        self.disc_optim.load_state_dict(checkpoint['disc_optim'])
+
+        self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))
