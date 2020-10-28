@@ -21,7 +21,6 @@ class BaseTrainer:
         # setup GPU device if available, move model into configured device
         self.device, self.device_ids = self._prepare_device(config.n_gpu)
 
-
         # setup visualization writer instance
         self.logger.info("Creating tensorboard writer...")
         self.writer = TensorboardWriter(config.summary_dir, self.logger, config.tensorboard)
