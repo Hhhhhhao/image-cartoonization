@@ -125,8 +125,8 @@ class CycleGANTrainer(BaseTrainer):
             # discriminator loss
             disc_fake_src_logits = self.disc_src(fake_src_imgs)
             disc_fake_tar_logits = self.disc_tar(fake_tar_imgs)
-            disc_src_loss = self.adv_criterion(disc_fake_src_logits, real=True)
-            disc_tar_loss = self.adv_criterion(disc_fake_tar_logits, real=True)
+            disc_src_loss_ = self.adv_criterion(disc_fake_src_logits, real=True)
+            disc_tar_loss_ = self.adv_criterion(disc_fake_tar_logits, real=True)
 
             # translate back and cycle consistant loss
             rec_src_imgs = self.gen_tar_src(fake_tar_imgs)
@@ -135,8 +135,8 @@ class CycleGANTrainer(BaseTrainer):
             rec_tar_loss = self.cyc_criterion(rec_tar_imgs, tar_imgs)
 
             # total generator loss
-            gen_src_loss = self.config.lambda_adv * disc_tar_loss + self.config.lambda_rec * rec_src_loss
-            gen_tar_loss = self.config.lambda_adv * disc_src_loss + self.config.lambda_rec * rec_tar_loss
+            gen_src_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_src_loss
+            gen_tar_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_tar_loss
             gen_loss = gen_src_loss + gen_tar_loss
             gen_loss.backward()
             self.gen_optim.step()
@@ -214,8 +214,8 @@ class CycleGANTrainer(BaseTrainer):
                 rec_src_loss = self.cyc_criterion(rec_src_imgs, src_imgs)
                 rec_tar_loss = self.cyc_criterion(rec_tar_imgs, tar_imgs)
 
-                gen_src_loss = self.config.lambda_adv * disc_tar_loss + self.config.lambda_rec * rec_src_loss
-                gen_tar_loss = self.config.lambda_adv * disc_src_loss + self.config.lambda_rec * rec_tar_loss
+                gen_src_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_src_loss
+                gen_tar_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_tar_loss
 
                 disc_src_losses.append(disc_src_loss.item())
                 disc_tar_losses.append(disc_tar_loss.item())

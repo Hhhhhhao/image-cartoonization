@@ -151,14 +151,12 @@ class ExpnameTrainer(BaseTrainer):
 
             # log losses
             self.writer.set_step(epoch)
-            self.valid_metrics.update('disc', np.mean(disc_src_losses))
-            self.valid_metrics.update('gen', np.mean(disc_tar_losses))
+            self.valid_metrics.update('disc', np.mean(disc_losses))
+            self.valid_metrics.update('gen', np.mean(gen_losses))
 
             # log images
             src_tar_imgs = torch.cat([src_imgs.cpu(), fake_tar_imgs.cpu()], dim=-1)
             self.writer.add_image('src2tar', make_grid(src_tar_imgs.cpu(), nrow=1, normalize=True))
-            tar_src_imgs = torch.cat([tar_imgs.cpu(), fake_src_imgs.cpu()], dim=-1)
-            self.writer.add_image('tar2src', make_grid(tar_src_imgs.cpu(), nrow=1, normalize=True))
         return self.valid_metrics.result()
 
 
