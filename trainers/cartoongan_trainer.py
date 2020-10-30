@@ -52,12 +52,71 @@ class CartoonGanTrainer(BaseTrainer):
         self.log_step = int(np.sqrt(self.train_dataloader.batch_size))
 
         self.logger.info("Creating model architecture...")
-        g,d,vgg = self._build_model()
-        self.g = g.to(self.device)
-        self.d = d.to(self.device)
+        g,d = self._build_model()
+
         # resume
         if self.config.resume is not None:
             self._resume_checkpoint(config.resume)
+
+        # move to device
+        self.gen = g.to(self.device)
+        self.disc = d.to(self.device)
+        if len(self.device_ids) > 1:
+            self.gen = torch.nn.DataParallel(self.gen, device_ids=self.device_ids)
+            self.disc = torch.nn.DataParallel(self.disc, device_ids=self.device_ids)
+
+        # optimizer
+        self.logger.info("Creating optimizers...")
+        self.gen_optim, self.disc_optim = self._build_optimizer(self.gen, self.disc)
+
+        # build loss
+        self.logger.info("Creating losses...")
+        self._build_criterion()
+
+        # metric tracker
+        self.logger.info("Creating metric trackers...")
+        self._build_metrics()
+
+    def _build_dataloader(self):
+        train_dataloader = CartoonDataLoader(
+            data_dir=self.config.data_dir,
+            src_style='real',
+            tar_style=self.config.tar_style,
+            batch_size=self.config.batch_size,
+            image_size=self.config.image_size,
+            num_workers=self.config.num_workers)
+        valid_dataloader = train_dataloader.split_validation()
+        return train_dataloader, valid_dataloader
+
+    def _build_model(self):
+        gen = Generator(self.config.image_size, self.config.down_size, self.config.num_res, self.config.skip_conn)
+        disc = Discriminator(self.config.image_size, self.config.down_size)
+        return gen,disc
+
+    def _build_optimizer(self, gen,disc):
+        gen_optim = torch.optim.AdamW(gen.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
+        disc_optim = torch.optim.AdamW(disc.parameters(),lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
+        return gen_optim,disc_optim
+
+    def _build_criterion(self):
+        # unclear about the loss in gan, skip for now
+        raise NotImplementedError('Need to build criterion')
+
+    def _build_metrics(self):
+        self.metric_names = ['disc','gen']
+        self.train_metrics = MetricTracker(*[metric for metric in self.metric_names], writer=self.writer)
+        self.valid_metrics = MetricTracker(*[metric for metric in self.metric_names], writer=self.writer)
+
+
+    def _train_epoch(self, epoch):
+
+        self.gen.train()
+        self.disc.train()
+        self.train_metrics.reset()
+
+        for batch_index,(src_imgs, tar_imgs) in enumerate(self.train_dataloader):
+
+
 
 if __name__ == "__main__":
     # test VGGperceptualoss
