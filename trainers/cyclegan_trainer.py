@@ -125,11 +125,12 @@ class CycleGANTrainer(BaseTrainer):
             # identity loss
             idt_tar_imgs = self.gen_src_tar(tar_imgs)
             idt_src_imgs = self.gen_tar_src(src_imgs)
+            idt_loss = 0.5 * self.config.lambda_rec * (self.ide_criterion(idt_tar_imgs, tar_imgs) + self.ide_criterion(idt_src_imgs, src_imgs))
 
             # total generator loss
-            gen_src_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_src_loss + 0.5 * self.config.lambda_rec * idt_tar_imgs
-            gen_tar_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_tar_loss + 0.5 * self.config.lambda_rec * idt_src_imgs
-            gen_loss = gen_src_loss + gen_tar_loss
+            gen_src_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_src_loss
+            gen_tar_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_tar_loss
+            gen_loss = gen_src_loss + gen_tar_loss + idt_loss
             gen_loss.backward()
             self.gen_optim.step()
 
