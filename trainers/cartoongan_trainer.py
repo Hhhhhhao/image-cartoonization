@@ -4,44 +4,9 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from data_loaders import CartoonDataLoader
+from data_loaders import CartoonGANDataLoader
 from utils import MetricTracker
 
-# VGG loss, Cite from https://gist.github.com/alper111/8233cdb0414b4cb5853f2f730ab95a49
-class VGGPerceptualLoss(torch.nn.Module):
-    def __init__(self, resize=True):
-        super(VGGPerceptualLoss, self).__init__()
-        blocks = []
-        blocks.append(torchvision.models.vgg16(pretrained=True).features[:4].eval())
-        blocks.append(torchvision.models.vgg16(pretrained=True).features[4:9].eval())
-        blocks.append(torchvision.models.vgg16(pretrained=True).features[9:16].eval())
-        blocks.append(torchvision.models.vgg16(pretrained=True).features[16:23].eval())
-        for bl in blocks:
-            for p in bl:
-                p.requires_grad = False
-        self.blocks = torch.nn.ModuleList(blocks)
-        self.transform = torch.nn.functional.interpolate
-        self.mean = torch.nn.Parameter(torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1))
-        self.std = torch.nn.Parameter(torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1))
-        self.resize = resize
-
-    def forward(self, input, target):
-        if input.shape[1] != 3:
-            input = input.repeat(1, 3, 1, 1)
-            target = target.repeat(1, 3, 1, 1)
-        input = (input-self.mean) / self.std
-        target = (target-self.mean) / self.std
-        if self.resize:
-            input = self.transform(input, mode='bilinear', size=(224, 224), align_corners=False)
-            target = self.transform(target, mode='bilinear', size=(224, 224), align_corners=False)
-        loss = 0.0
-        x = input
-        y = target
-        for block in self.blocks:
-            x = block(x)
-            y = block(y)
-            loss += torch.nn.functional.l1_loss(x, y)
-        return loss
 
 class CartoonGanTrainer(BaseTrainer):
     def __init__(self, config):
@@ -78,7 +43,7 @@ class CartoonGanTrainer(BaseTrainer):
         self._build_metrics()
 
     def _build_dataloader(self):
-        train_dataloader = CartoonDataLoader(
+        train_dataloader = CartoonGANDataLoader(
             data_dir=self.config.data_dir,
             src_style='real',
             tar_style=self.config.tar_style,
@@ -94,19 +59,18 @@ class CartoonGanTrainer(BaseTrainer):
         return gen,disc
 
     def _build_optimizer(self, gen,disc):
-        gen_optim = torch.optim.AdamW(gen.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        disc_optim = torch.optim.AdamW(disc.parameters(),lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        return gen_optim,disc_optim
+        gen_optim = torch.optim.AdamW(gen.parameters(),  lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
+        disc_optim = torch.optim.AdamW(disc.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
+        return gen_optim, disc_optim
 
     def _build_criterion(self):
-        self.adv_loss = torch.nn.MSELoss().to(self.device) # not sure if needed to move the loss to device
-        self.content_loss = VGGPerceptualLoss().to(self.device)
+        self.adv_loss = eval('{}Loss'.format(self.config.adv_criterion))()
+        self.cont_loss = VGGPerceptualLoss().to(self.device)
 
     def _build_metrics(self):
-        self.metric_names = ['disc','gen']
+        self.metric_names = ['disc', 'gen']
         self.train_metrics = MetricTracker(*[metric for metric in self.metric_names], writer=self.writer)
         self.valid_metrics = MetricTracker(*[metric for metric in self.metric_names], writer=self.writer)
-
 
     def _train_epoch(self, epoch):
 
@@ -114,44 +78,38 @@ class CartoonGanTrainer(BaseTrainer):
         self.disc.train()
         self.train_metrics.reset()
 
-        # not sure about this real and fake
-        real = torch.ones(self.config.batch_size,1,self.config.image_size,self.config.image_size)
-        fake = torch.zeros(self.config.batch_size,1,self.config.image_size,self.config.image_size)
-
-        for batch_index,(src_imgs, tar_imgs) in enumerate(self.train_dataloader):
-            src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
+        for batch_idx, (src_imgs, tar_imgs, smooth_tar_imgs) in enumerate(self.train_dataloader):
+            src_imgs, tar_imgs, smooth_tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device), smooth_tar_imgs.to(self.device)
             self.gen_optim.zero_grad()
             self.disc_optim.zero_grad()
 
             # generation
             fake_tar_imgs = self.gen(src_imgs)
 
-            # train D
-            self.gen_optim.zero_grad()
-            disc_tar_real_logits = self.disc(tar_imgs)
-            disc_src_fake_logits = self.disc(fake_tar_imgs.detach())
-
-            # compute loss
-            disc_loss = self.adv_loss(disc_tar_real_logits,real) + self.adv_loss(disc_src_fake_logits,fake)
-            # disc_loss = self.adv_loss(disc_tar_real_logits, real=True) + self.adv_loss(disc_src_fake_logits, real=False)
-            disc_loss.backward()
-            self.disc_optim.step()
-
             # train G
-            gen_src_logits = self.gen(src_imgs)
-            disc_fake_src_logits = self.disc(gen_src_logits)
-            gen_disc_loss = self.adv_loss(disc_fake_src_logits,real)
-            # gen_disc_loss = self.adv_loss(disc_fake_src_logits, real=True)
-            gen_content_loss = self.content_loss(src_imgs,gen_src_logits)
-            gen_loss = gen_disc_loss + gen_content_loss
+            self.set_requires_grad(self.disc, requires_grad=False)
+            disc_fake_tar_logits = self.disc(fake_tar_imgs)
+            gen_adv_loss = self.adv_loss(disc_fake_tar_logits, real=True)
+            gen_cont_loss = self.cont_loss(fake_tar_imgs, src_imgs)
+            gen_loss = self.config.lambda_adv * gen_adv_loss +  self.config.lambda_rec * gen_cont_loss
             gen_loss.backward()
             self.gen_optim.step()
+
+            # train D
+            self.set_requires_grad(self.disc, requires_grad=True)
+            disc_real_logits = self.disc(tar_imgs)
+            disc_fake_logits = self.disc(fake_tar_imgs.detach())
+            disc_edge_logits = self.disc(smooth_tar_imgs)
+
+            # compute loss
+            disc_loss = self.adv_loss(disc_real_logits, real=True) + self.adv_loss(disc_fake_logits, real=False) + self.adv_loss(disc_edge_logits, real=True)
+            disc_loss.backward()
+            self.disc_optim.step()
 
             # ============ log ============ #
             self.writer.set_step((epoch - 1) * len(self.train_dataloader) + batch_idx)
             self.train_metrics.update('disc', disc_loss.item())
             self.train_metrics.update('gen', gen_loss.item())
-
 
             if batch_idx % self.log_step == 0:
                 self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
@@ -159,7 +117,6 @@ class CartoonGanTrainer(BaseTrainer):
                     self._progress(batch_idx),
                     disc_loss.item(),
                     gen_loss.item()))
-                break
 
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
@@ -168,34 +125,30 @@ class CartoonGanTrainer(BaseTrainer):
         self.train_dataloader.shuffle_dataset()
         return log
 
-
     def _valid_epoch(self,epoch):
-
         self.gen.eval()
         self.disc.eval()
-
         disc_losses = []
         gen_losses = []
         self.valid_metrics.reset()
         with torch.no_grad():
-            for batch_idx, (src_imgs, tar_imgs) in enumerate(self.valid_dataloader):
-                src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
+            for batch_idx, (src_imgs, tar_imgs, smooth_tar_imgs) in enumerate(self.valid_dataloader):
+                src_imgs, tar_imgs, smooth_tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device), smooth_tar_imgs.to(self.device)
 
                 # generation
                 fake_tar_imgs = self.gen(src_imgs)
 
                 # D loss
-                disc_src_fake_logits = self.disc(fake_tar_imgs.detach())
-                disc_src_real_logits = self.disc(tar_imgs)
-                # disc_loss = self.adv_loss(disc_tar_real_logits, real) + self.adv_loss(disc_src_fake_logits, fake)
-                disc_loss = self.adv_loss(disc_src_real_logits, real=True) + self.adv_loss(disc_src_fake_logits, real=False)
+                disc_fake_logits = self.disc(fake_tar_imgs.detach())
+                disc_real_logits = self.disc(tar_imgs)
+                disc_edge_logits = self.disc(smooth_tar_imgs)
+                disc_loss = self.adv_loss(disc_real_logits, real=True) + self.adv_loss(disc_fake_logits, real=False) + self.adv_loss(disc_edge_logits, real=True)
 
                 # G loss
                 disc_fake_tar_logits = self.disc(fake_tar_imgs)
-                # gen_disc_loss = self.adv_loss(disc_fake_tar_logits, real)
                 gen_disc_loss = self.adv_loss(disc_fake_tar_logits, real=True)
-                gen_content_loss = self.content_loss(src_imgs, fake_tar_imgs)
-                gen_loss = gen_disc_loss + gen_content_loss
+                gen_content_loss = self.cont_loss(fake_tar_imgs, src_imgs)
+                gen_loss = self.config.lambda_adv * gen_disc_loss +  self.config.lambda_rec * gen_content_loss
 
                 disc_losses.append(disc_loss.item())
                 gen_losses.append(gen_loss.item())
@@ -255,11 +208,3 @@ class CartoonGanTrainer(BaseTrainer):
         self.disc_optim.load_state_dict(checkpoint['disc_optim'])
 
         self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))
-
-if __name__ == "__main__":
-    # test VGGperceptualoss
-    loss = VGGPerceptualLoss()
-    a = torch.ones(10,3,224,224)
-    b = torch.zeros(10,3,224,224)
-    l = loss(a,b)
-    print(l.data)

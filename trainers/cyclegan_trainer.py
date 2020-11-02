@@ -102,7 +102,7 @@ class CycleGANTrainer(BaseTrainer):
             self.gen_optim.zero_grad()
             self.disc_optim.zero_grad()
 
-            # ============ Generation ============ #
+            # ============ generation ============ #
             fake_tar_imgs = self.gen_src_tar(src_imgs)
             fake_src_imgs = self.gen_tar_src(tar_imgs)
 
