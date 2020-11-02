@@ -2,6 +2,7 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
+from utils.cartoongan import smooth_image_edges
 
 
 class CartoonDataset(Dataset):
@@ -54,11 +55,37 @@ class CartoonDataset(Dataset):
         return src_img, tar_img
 
 
+class CartoonGANDataset(CartoonDataset):
+    def __init__(self, data_dir, src_style='real', tar_style='gongqijun', src_transform=None, tar_transform=None):
+        super(CartoonGANDataset, self).__init__(data_dir, src_style, tar_style, src_transform, tar_transform)
+
+    def __getitem__(self, index):
+        src_path = self.src_data[index]
+        tar_path = self.tar_data[index]
+        src_img = Image.open(os.path.join(self.data_dir, src_path))
+        tar_img = Image.open(os.path.join(self.data_dir, tar_path))
+        src_img = src_img.convert('RGB')
+        tar_img = tar_img.convert('RGB')
+
+        # get edge smoothed transform
+        smooth_tar_img = smooth_image_edges(np.asarray(tar_img))
+        smooth_tar_img = Image.fromarray(smooth_tar_img)
+
+        # transform src img
+        if self.src_transform is not None:
+            src_img = self.src_transform(src_img)
+        # transform tar img
+        if self.tar_transform is not None:
+            tar_img = self.tar_transform(tar_img)
+            smooth_tar_img = self.tar_transform(smooth_tar_img)
+        return src_img, tar_img, smooth_tar_img
+
+
 if __name__ == '__main__':
     from tqdm import tqdm
-    data_dir = '/Users/leon/Downloads/cartoon_datasets'
+    data_dir = '/home/zhaobin/cartoon/'
     style = 'gongqijun'
-    dataset = CartoonDataset(data_dir, style)
+    dataset = CartoonGANDataset(data_dir, style)
 
     for i in tqdm(range(len(dataset)), total=len(dataset)):
-        src_img, tar_img = dataset.__getitem__(i)
+        src_img, tar_img, smooth_tar_img = dataset.__getitem__(i)

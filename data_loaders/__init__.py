@@ -1,1 +1,1 @@
-from .data_loader import CartoonDataLoader
+from .data_loader import CartoonDataLoader, CartoonGANDataLoader

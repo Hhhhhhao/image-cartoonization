@@ -78,6 +78,7 @@ class CycleGANTrainer(BaseTrainer):
     def _build_criterion(self):
         self.adv_criterion = eval('{}Loss'.format(self.config.adv_criterion))()
         self.cyc_criterion = torch.nn.L1Loss()
+        self.ide_criterion = torch.nn.L1Loss()
 
     def _build_metrics(self):
         self.metric_names = ['disc_src', 'disc_tar', 'gen_src_tar', 'gen_tar_src']
@@ -102,7 +103,7 @@ class CycleGANTrainer(BaseTrainer):
             self.gen_optim.zero_grad()
             self.disc_optim.zero_grad()
 
-            # ============ Generation ============ #
+            # ============ generation ============ #
             fake_tar_imgs = self.gen_src_tar(src_imgs)
             fake_src_imgs = self.gen_tar_src(tar_imgs)
 
@@ -121,10 +122,15 @@ class CycleGANTrainer(BaseTrainer):
             rec_src_loss = self.cyc_criterion(rec_src_imgs, src_imgs)
             rec_tar_loss = self.cyc_criterion(rec_tar_imgs, tar_imgs)
 
+            # identity loss
+            idt_tar_imgs = self.gen_src_tar(tar_imgs)
+            idt_src_imgs = self.gen_tar_src(src_imgs)
+            idt_loss = 0.5 * self.config.lambda_rec * (self.ide_criterion(idt_tar_imgs, tar_imgs) + self.ide_criterion(idt_src_imgs, src_imgs))
+
             # total generator loss
             gen_src_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_src_loss
             gen_tar_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_tar_loss
-            gen_loss = gen_src_loss + gen_tar_loss
+            gen_loss = gen_src_loss + gen_tar_loss + idt_loss
             gen_loss.backward()
             self.gen_optim.step()
 

@@ -7,9 +7,9 @@ def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 
     # basic options
-    parser.add_argument('--exp-name', default='cyclegan', help='experiment name',
+    parser.add_argument('--exp-name', default='cartoongan', help='experiment name',
                         choices=['cyclegan', 'cartoongan', 'whitebox'])
-    parser.add_argument('--data-dir', default='/Users/leon/Downloads/cartoon_datasets', help='data dir')
+    parser.add_argument('--data-dir', default='/home/zhaobin/cartoon/', help='data dir')
     parser.add_argument('--n-gpu', default=1, type=int, help='number of gpus to use')
     parser.add_argument('--tensorboard', default=False, action='store_true', help='use tensorboard to log results')
     parser.add_argument('--num-workers', default=4, type=int, help='number of workers in data loaders')
