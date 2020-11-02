@@ -42,6 +42,8 @@ class CartoonDataset(Dataset):
         tar_path = self.tar_data[index]
         src_img = Image.open(os.path.join(self.data_dir, src_path))
         tar_img = Image.open(os.path.join(self.data_dir, tar_path))
+        src_img = src_img.convert('RGB')
+        tar_img = tar_img.convert('RGB')
 
         # transform src img
         if self.src_transform is not None:

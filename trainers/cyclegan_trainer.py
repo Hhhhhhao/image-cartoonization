@@ -77,7 +77,7 @@ class CycleGANTrainer(BaseTrainer):
 
     def _build_criterion(self):
         self.adv_criterion = eval('{}Loss'.format(self.config.adv_criterion))()
-        self.cyc_criterion = torch.nn.MSELoss()
+        self.cyc_criterion = torch.nn.L1Loss()
 
     def _build_metrics(self):
         self.metric_names = ['disc_src', 'disc_tar', 'gen_src_tar', 'gen_tar_src']
@@ -106,21 +106,8 @@ class CycleGANTrainer(BaseTrainer):
             fake_tar_imgs = self.gen_src_tar(src_imgs)
             fake_src_imgs = self.gen_tar_src(tar_imgs)
 
-            # ============ train D ============ #
-            # get logits from discriminators
-            disc_src_real_logits = self.disc_src(src_imgs)
-            disc_src_fake_logits = self.disc_src(fake_src_imgs.detach())
-            disc_tar_real_logits = self.disc_tar(tar_imgs)
-            disc_tar_fake_logits = self.disc_tar(fake_tar_imgs.detach())
-
-            # compute loss
-            disc_src_loss = self.adv_criterion(disc_src_real_logits, real=True) + self.adv_criterion(disc_src_fake_logits, real=False)
-            disc_tar_loss = self.adv_criterion(disc_tar_real_logits, real=True) + self.adv_criterion(disc_tar_fake_logits, real=False)
-            disc_loss = disc_src_loss + disc_tar_loss
-            disc_loss.backward()
-            self.disc_optim.step()
-
             # ============ train G ============ #
+            self.set_requires_grad([self.disc_tar, self.disc_src], requires_grad=False)
 
             # discriminator loss
             disc_fake_src_logits = self.disc_src(fake_src_imgs)
@@ -141,6 +128,22 @@ class CycleGANTrainer(BaseTrainer):
             gen_loss.backward()
             self.gen_optim.step()
 
+            # ============ train D ============ #
+            self.set_requires_grad([self.disc_tar, self.disc_src], requires_grad=True)
+
+            # get logits from discriminators
+            disc_src_real_logits = self.disc_src(src_imgs)
+            disc_src_fake_logits = self.disc_src(fake_src_imgs.detach())
+            disc_tar_real_logits = self.disc_tar(tar_imgs)
+            disc_tar_fake_logits = self.disc_tar(fake_tar_imgs.detach())
+
+            # compute loss
+            disc_src_loss = self.adv_criterion(disc_src_real_logits, real=True) + self.adv_criterion(disc_src_fake_logits, real=False)
+            disc_tar_loss = self.adv_criterion(disc_tar_real_logits, real=True) + self.adv_criterion(disc_tar_fake_logits, real=False)
+            disc_loss = disc_src_loss + disc_tar_loss
+            disc_loss.backward()
+            self.disc_optim.step()
+
             # ============ log ============ #
             self.writer.set_step((epoch - 1) * len(self.train_dataloader) + batch_idx)
             self.train_metrics.update('disc_src', disc_src_loss.item())
@@ -154,7 +157,6 @@ class CycleGANTrainer(BaseTrainer):
                     self._progress(batch_idx),
                     disc_loss.item(),
                     gen_loss.item()))
-                break
 
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
@@ -187,19 +189,6 @@ class CycleGANTrainer(BaseTrainer):
                 fake_tar_imgs = self.gen_src_tar(src_imgs)
                 fake_src_imgs = self.gen_tar_src(tar_imgs)
 
-                # ============ D Loss ============ #
-                # get logits from discriminators
-                disc_src_real_logits = self.disc_src(src_imgs)
-                disc_src_fake_logits = self.disc_src(fake_src_imgs.detach())
-                disc_tar_real_logits = self.disc_tar(tar_imgs)
-                disc_tar_fake_logits = self.disc_tar(fake_tar_imgs.detach())
-
-                # compute loss
-                disc_src_loss = self.adv_criterion(disc_src_real_logits, real=True) + self.adv_criterion(
-                    disc_src_fake_logits, real=False)
-                disc_tar_loss = self.adv_criterion(disc_tar_real_logits, real=True) + self.adv_criterion(
-                    disc_tar_fake_logits, real=False)
-
                 # ============ G Loss ============ #
 
                 # discriminator loss
@@ -217,13 +206,25 @@ class CycleGANTrainer(BaseTrainer):
                 gen_src_loss = self.config.lambda_adv * disc_src_loss_ + self.config.lambda_rec * rec_src_loss
                 gen_tar_loss = self.config.lambda_adv * disc_tar_loss_ + self.config.lambda_rec * rec_tar_loss
 
+                # ============ D Loss ============ #
+
+                # get logits from discriminators
+                disc_src_real_logits = self.disc_src(src_imgs)
+                disc_src_fake_logits = self.disc_src(fake_src_imgs.detach())
+                disc_tar_real_logits = self.disc_tar(tar_imgs)
+                disc_tar_fake_logits = self.disc_tar(fake_tar_imgs.detach())
+
+                # compute loss
+                disc_src_loss = self.adv_criterion(disc_src_real_logits, real=True) + self.adv_criterion(
+                    disc_src_fake_logits, real=False)
+                disc_tar_loss = self.adv_criterion(disc_tar_real_logits, real=True) + self.adv_criterion(
+                    disc_tar_fake_logits, real=False)
+
+
                 disc_src_losses.append(disc_src_loss.item())
                 disc_tar_losses.append(disc_tar_loss.item())
                 gen_src_tar_losses.append(gen_src_loss.item())
                 gen_tar_src_losses.append(gen_tar_loss.item())
-
-                if batch_idx == 2:
-                    break
 
             # log losses
             self.writer.set_step(epoch)

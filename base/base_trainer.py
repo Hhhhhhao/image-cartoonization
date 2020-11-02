@@ -145,3 +145,16 @@ class BaseTrainer:
         current = batch_idx * self.train_dataloader.batch_size
         total = self.train_dataloader.n_samples
         return base.format(current, total, 100.0 * current / total)
+
+    def set_requires_grad(self, models, requires_grad=False):
+        """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
+        Parameters:
+            nets (network list)   -- a list of networks
+            requires_grad (bool)  -- whether the networks require gradients or not
+        """
+        if not isinstance(models, list):
+            models = [models]
+        for model in models:
+            if model is not None:
+                for param in model.parameters():
+                    param.requires_grad = requires_grad

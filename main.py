@@ -27,7 +27,7 @@ def init_config():
     parser.add_argument('--monitor', default=None, help='monitor metric for early stopping')
     parser.add_argument('--early-stop', type=int, default=5, help='early stopping metric')
     parser.add_argument('--adv-criterion', type=str, default='LSGAN', help='adversarial loss type')
-    parser.add_argument('--lambda_adv', type=float, default=1, help='adversarial loss weight')
+    parser.add_argument('--lambda-adv', type=float, default=1, help='adversarial loss weight')
 
     # model options
     parser.add_argument('--image-size', default=32, type=int, help='input size')
@@ -36,9 +36,8 @@ def init_config():
     parser.add_argument('--skip-conn', default=False, action='store_true', help="flag of using skip connection in generator")
 
     # ================== extra options: add parameters in your experiements here =========================
-
     # cyclegan
-    parser.add_argument('--lambda_rec', type=float, default=0.1, help='cycle rec. loss weight')
+    parser.add_argument('--lambda-rec', type=float, default=0.1, help='cycle rec. loss weight')
 
     return parser.parse_args()
 
