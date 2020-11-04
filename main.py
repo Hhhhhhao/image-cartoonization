@@ -18,7 +18,7 @@ def init_config():
 
     # train options
     parser.add_argument('--src-style', default='real', help='source images style', choices=['real'])
-    parser.add_argument('--tar-style', default='gongqijun', help='target images style', choices=['gongqijun'])
+    parser.add_argument('--tar-style', default='gongqijun', help='target images style', choices=['gongqijun', 'tangqian', 'xinhaicheng', 'disney'])
     parser.add_argument('--epochs', default=30, type=int, help='number of epochs for training the model')
     parser.add_argument('--batch-size', default=2, type=int, help='batch size')
     parser.add_argument('--g-lr', default=1e-3, type=float, help='generator learning rate')
