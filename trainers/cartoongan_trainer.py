@@ -91,7 +91,7 @@ class CartoonGanTrainer(BaseTrainer):
             disc_fake_tar_logits = self.disc(fake_tar_imgs)
             gen_adv_loss = self.adv_loss(disc_fake_tar_logits, real=True)
             gen_cont_loss = self.cont_loss(fake_tar_imgs, src_imgs)
-            gen_loss = self.config.lambda_adv * gen_adv_loss +  self.config.lambda_rec * gen_cont_loss
+            gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_rec * gen_cont_loss
             gen_loss.backward()
             self.gen_optim.step()
 

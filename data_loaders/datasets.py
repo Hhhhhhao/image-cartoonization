@@ -84,7 +84,7 @@ class CartoonGANDataset(CartoonDataset):
 if __name__ == '__main__':
     from tqdm import tqdm
     data_dir = '/home/zhaobin/cartoon/'
-    style = 'gongqijun'
+    style = 'tangqian'
     dataset = CartoonGANDataset(data_dir, style)
 
     for i in tqdm(range(len(dataset)), total=len(dataset)):
