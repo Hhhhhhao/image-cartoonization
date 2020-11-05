@@ -4,7 +4,7 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from data_loaders import CartoonDataLoader
+from data_loaders import CartoonDataLoader, DiffAugment
 from utils import MetricTracker
 
 
@@ -111,8 +111,8 @@ class CycleGANTrainer(BaseTrainer):
             self.set_requires_grad([self.disc_tar, self.disc_src], requires_grad=False)
 
             # discriminator loss
-            disc_fake_src_logits = self.disc_src(fake_src_imgs)
-            disc_fake_tar_logits = self.disc_tar(fake_tar_imgs)
+            disc_fake_src_logits = self.disc_src(DiffAugment(fake_src_imgs, policy=self.config.data_aug_policy))
+            disc_fake_tar_logits = self.disc_tar(DiffAugment(fake_tar_imgs, policy=self.config.data_aug_policy))
             disc_src_loss_ = self.adv_criterion(disc_fake_src_logits, real=True)
             disc_tar_loss_ = self.adv_criterion(disc_fake_tar_logits, real=True)
 
@@ -138,10 +138,10 @@ class CycleGANTrainer(BaseTrainer):
             self.set_requires_grad([self.disc_tar, self.disc_src], requires_grad=True)
 
             # get logits from discriminators
-            disc_src_real_logits = self.disc_src(src_imgs)
-            disc_src_fake_logits = self.disc_src(fake_src_imgs.detach())
-            disc_tar_real_logits = self.disc_tar(tar_imgs)
-            disc_tar_fake_logits = self.disc_tar(fake_tar_imgs.detach())
+            disc_src_real_logits = self.disc_src(DiffAugment(src_imgs, policy=self.config.data_aug_policy))
+            disc_src_fake_logits = self.disc_src(DiffAugment(fake_src_imgs.detach(), policy=self.config.data_aug_policy))
+            disc_tar_real_logits = self.disc_tar(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
+            disc_tar_fake_logits = self.disc_tar(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
 
             # compute loss
             disc_src_loss = self.adv_criterion(disc_src_real_logits, real=True) + self.adv_criterion(disc_src_fake_logits, real=False)

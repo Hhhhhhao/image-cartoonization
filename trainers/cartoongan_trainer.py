@@ -4,7 +4,7 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from data_loaders import CartoonGANDataLoader
+from data_loaders import CartoonGANDataLoader, DiffAugment
 from utils import MetricTracker
 
 
@@ -88,7 +88,7 @@ class CartoonGanTrainer(BaseTrainer):
 
             # train G
             self.set_requires_grad(self.disc, requires_grad=False)
-            disc_fake_tar_logits = self.disc(fake_tar_imgs)
+            disc_fake_tar_logits = self.disc(DiffAugment(fake_tar_imgs, policy=self.config.data_aug_policy))
             gen_adv_loss = self.adv_loss(disc_fake_tar_logits, real=True)
             gen_cont_loss = self.cont_loss(fake_tar_imgs, src_imgs)
             gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_rec * gen_cont_loss
@@ -97,9 +97,9 @@ class CartoonGanTrainer(BaseTrainer):
 
             # train D
             self.set_requires_grad(self.disc, requires_grad=True)
-            disc_real_logits = self.disc(tar_imgs)
-            disc_fake_logits = self.disc(fake_tar_imgs.detach())
-            disc_edge_logits = self.disc(smooth_tar_imgs)
+            disc_real_logits = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
+            disc_fake_logits = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
+            disc_edge_logits = self.disc(DiffAugment(smooth_tar_imgs, policy=self.config.data_aug_policy))
 
             # compute loss
             disc_loss = self.adv_loss(disc_real_logits, real=True) + self.adv_loss(disc_fake_logits, real=False) + self.adv_loss(disc_edge_logits, real=True)

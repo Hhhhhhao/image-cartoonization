@@ -9,7 +9,6 @@ def build_trainer(config):
     elif config.exp_name == 'cartoongan':
         trainer = CartoonGanTrainer(config)
     elif config.exp_name == 'whitebox':
-        # raise NotImplementedError
         trainer = WhiteboxTrainer(config)
     else:
         raise NotImplementedError

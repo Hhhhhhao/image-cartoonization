@@ -43,12 +43,9 @@ class LSGANLoss(nn.Module):
         return self.mse_loss(pred_logits, self.get_target_tensor(pred_logits, real))
 
 
-
 class WGANGPLoss(nn.Module):
-    def __init__(self, batch_size, device, lambda_=10):
+    def __init__(self, lambda_=10):
         super(WGANGPLoss, self).__init__()
-        self.device = device
-        self.batch_size = batch_size
         self.lambda_ = lambda_
 
     def forward(self, pred_logits, real=True):
