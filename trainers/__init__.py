@@ -1,5 +1,6 @@
 from .cyclegan_trainer import CycleGANTrainer
 from .cartoongan_trainer import CartoonGanTrainer
+from .whitebox_trainer import WhiteboxTrainer
 
 
 def build_trainer(config):
@@ -8,7 +9,8 @@ def build_trainer(config):
     elif config.exp_name == 'cartoongan':
         trainer = CartoonGanTrainer(config)
     elif config.exp_name == 'whitebox':
-        raise NotImplementedError
+        # raise NotImplementedError
+        trainer = WhiteboxTrainer(config)
     else:
         raise NotImplementedError
     return trainer
