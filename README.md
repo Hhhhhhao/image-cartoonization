@@ -21,8 +21,12 @@ After you making changes and debugging them to ensure successful training, creat
  
 
 ## Training
+```
+CUDA_VISIBLE_DEVICES=7,8 python main.py --exp-name cartoongan/cyclegan/whitebox --data-dir /home/zhaobin/cartoon/ --n-gpu 2 --tensorboard --num-workers 8 --src-style real --tar-style gongqijun/tangqian/xinhaicheng/disney --epochs 200 --batch-size 32 --g-lr 1e-4 --d-lr 2e-4 --adv-criterion LSGAN --lambda-adv 1.0 --lambda-rec 5.0 --image-size 128 --down-size 16 --num-res 4 --data-aug-policy  color,translation,cutout/translation,cutout[for whitebox]
+```
 
 ## Evaluation
+
 
 ## Results
 
