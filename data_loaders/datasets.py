@@ -82,40 +82,9 @@ class CartoonGANDataset(CartoonDataset):
         return src_img, tar_img, smooth_tar_img
 
 
-class WhiteboxDataset(Dataset):
+class WhiteboxDataset(CartoonDataset):
     def __init__(self, data_dir, src_style='real', tar_style='gongqijun', src_transform=None, tar_transform=None):
-        self.data_dir = data_dir
-        self.src_data, self.tar_data = self._load_data(data_dir, src_style, tar_style)
-        # self.superpixel = superpixel(self.src_data)
-        print("total {} {} images for training".format(len(self.src_data), src_style))
-        print("total {} {} images for training".format(len(self.tar_data), tar_style))
-        self.src_transform = src_transform
-        self.tar_transform = tar_transform
-
-    def _load_data(self, data_dir, src_style, tar_style):
-        src_data = []
-        with open(os.path.join(data_dir, '{}_train.txt'.format(src_style)), 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                path = line.strip()
-                src_data.append(path)
-
-        tar_data = []
-        with open(os.path.join(data_dir, '{}_train.txt'.format(tar_style)), 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                path = line.strip()
-                tar_data.append(path)
-
-        return src_data, tar_data
-
-    def _shuffle_data(self):
-        np.random.shuffle(self.src_data)
-        np.random.shuffle(self.tar_data)
-        # np.random.shuffle(self.superpixel)
-
-    def __len__(self):
-        return len(self.src_data)
+        super(WhiteboxDataset, self).__init__(data_dir, src_style, tar_style, src_transform, tar_transform)
 
     def __getitem__(self, index):
         src_path = self.src_data[index]

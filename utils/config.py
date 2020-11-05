@@ -48,7 +48,7 @@ def process_config(config):
 
     # add datetime postfix
     timestamp = datetime.now().strftime('%y%m%d_%H%M%S')
-    exp_name = config.exp_name + '_{}_{}_{}_bs{}_glr{}_dlr{}_wd{}'.format(config.src_style, config.tar_style, config.image_size, config.batch_size, config.g_lr, config.d_lr, config.weight_decay)
+    exp_name = config.exp_name + '_{}'.format(config.data_aug_policy.replace(',', '_')) + '_{}_{}_{}_bs{}_glr{}_dlr{}_wd{}'.format(config.src_style, config.tar_style, config.image_size, config.batch_size, config.g_lr, config.d_lr, config.weight_decay)
     exp_name += ('_' + timestamp)
 
     # create some important directories to be used for that experiments

@@ -1,13 +1,14 @@
 import argparse
 from utils import process_config
 from trainers import build_trainer
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 
     # basic options
-    parser.add_argument('--exp-name', default='cartoongan', help='experiment name',
+    parser.add_argument('--exp-name', default='whitebox', help='experiment name',
                         choices=['cyclegan', 'cartoongan', 'whitebox'])
     parser.add_argument('--data-dir', default='/home/zhaobin/cartoon/', help='data dir')
     parser.add_argument('--n-gpu', default=1, type=int, help='number of gpus to use')
@@ -34,6 +35,7 @@ def init_config():
     parser.add_argument('--down-size', default=4, type=int, help='downsample size')
     parser.add_argument('--num-res', default=1, type=int, help='number of residual blocks in image generator')
     parser.add_argument('--skip-conn', default=False, action='store_true', help="flag of using skip connection in generator")
+    parser.add_argument('--data-aug-policy', default='color,translation,cutout', help='data efficient gan training')
 
     # ================== extra options: add parameters in your experiements here =========================
     # cyclegan
