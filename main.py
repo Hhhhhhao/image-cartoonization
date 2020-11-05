@@ -34,6 +34,7 @@ def init_config():
     parser.add_argument('--down-size', default=4, type=int, help='downsample size')
     parser.add_argument('--num-res', default=1, type=int, help='number of residual blocks in image generator')
     parser.add_argument('--skip-conn', default=False, action='store_true', help="flag of using skip connection in generator")
+    parser.add_argument('--data-aug-policy', default='color,translation,cutout', help='data efficient gan training')
 
     # ================== extra options: add parameters in your experiements here =========================
     # cyclegan

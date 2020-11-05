@@ -8,7 +8,6 @@ def build_transform(style='real', image_size=256):
         transform = transforms.Compose([
             transforms.RandomResizedCrop(image_size, scale=(0.5, 1.0)),
             transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.5),
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
     else:
@@ -17,7 +16,6 @@ def build_transform(style='real', image_size=256):
             transforms.RandomCrop(512),
             transforms.Resize(image_size),
             transforms.ToTensor(),
-            transforms.ColorJitter(brightness=0.5),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
     return transform
 
