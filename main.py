@@ -7,9 +7,9 @@ def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 
     # basic options
-    parser.add_argument('--exp-name', default='cyclegan', help='experiment name',
+    parser.add_argument('--exp-name', default='cartoongan', help='experiment name',
                         choices=['cyclegan', 'cartoongan', 'whitebox'])
-    parser.add_argument('--data-dir', default='/Users/leon/Downloads/cartoon_datasets', help='data dir')
+    parser.add_argument('--data-dir', default='/home/zhaobin/cartoon/', help='data dir')
     parser.add_argument('--n-gpu', default=1, type=int, help='number of gpus to use')
     parser.add_argument('--tensorboard', default=False, action='store_true', help='use tensorboard to log results')
     parser.add_argument('--num-workers', default=4, type=int, help='number of workers in data loaders')
@@ -18,7 +18,7 @@ def init_config():
 
     # train options
     parser.add_argument('--src-style', default='real', help='source images style', choices=['real'])
-    parser.add_argument('--tar-style', default='gongqijun', help='target images style', choices=['gongqijun'])
+    parser.add_argument('--tar-style', default='gongqijun', help='target images style', choices=['gongqijun', 'tangqian', 'xinhaicheng', 'disney'])
     parser.add_argument('--epochs', default=30, type=int, help='number of epochs for training the model')
     parser.add_argument('--batch-size', default=2, type=int, help='batch size')
     parser.add_argument('--g-lr', default=1e-3, type=float, help='generator learning rate')
@@ -27,7 +27,7 @@ def init_config():
     parser.add_argument('--monitor', default=None, help='monitor metric for early stopping')
     parser.add_argument('--early-stop', type=int, default=5, help='early stopping metric')
     parser.add_argument('--adv-criterion', type=str, default='LSGAN', help='adversarial loss type')
-    parser.add_argument('--lambda_adv', type=float, default=1, help='adversarial loss weight')
+    parser.add_argument('--lambda-adv', type=float, default=1, help='adversarial loss weight')
 
     # model options
     parser.add_argument('--image-size', default=32, type=int, help='input size')
@@ -36,9 +36,8 @@ def init_config():
     parser.add_argument('--skip-conn', default=False, action='store_true', help="flag of using skip connection in generator")
 
     # ================== extra options: add parameters in your experiements here =========================
-
     # cyclegan
-    parser.add_argument('--lambda_rec', type=float, default=0.1, help='cycle rec. loss weight')
+    parser.add_argument('--lambda-rec', type=float, default=0.1, help='cycle rec. loss weight')
 
     return parser.parse_args()
 

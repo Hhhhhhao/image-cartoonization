@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import scipy.stats as st
 from skimage import segmentation, color
 
 def box_filter(x, r):
@@ -13,7 +14,7 @@ def box_filter(x, r):
     box_kernel = np.array(box_kernel).astype(np.float32)
     box_kernel = torch.from_numpy(box_kernel)
 
-    output = F.conv2d(x, box_kernel, bias=None, stride=1, padding=r, groups=3)
+    output = F.conv2d(x, box_kernel, bias=None, stride=1, padding=r, groups=1)
     return output
 
 def guided_filter(x, y, r, eps=1e-2):
@@ -68,7 +69,42 @@ def color_shift(image1, mode='uniform'):
     output1 = (r_weight*r1 + g_weight*g1 + b_weight*b1) / (r_weight+g_weight+b_weight)  
     return output1
 
-def superpixel(image, seg_num=200):
-    seg_label = segmentation.slic(image.numpy(), n_segments=seg_num, sigma=1, compactness=10, convert2lab=True)
-    image = color.label2rgb(seg_label, image.numpy(), kind='mix')
-    return torch.from_numpy(image)
+def superpixel(batch_image, seg_num=100):
+    def process_slic(image):
+        seg_label = segmentation.slic(np.array(image), n_segments=seg_num, sigma=1,
+                                        compactness=10, convert2lab=True)
+        image = color.label2rgb(seg_label, np.array(image), kind='avg')
+        return image
+    
+    # num_job = np.shape(batch_image)[0]
+    batch_out = process_slic(batch_image)
+    return np.array(batch_out)
+
+
+def imageblur(kernel_size, image, device):
+    channel = list(image.size())[1]
+    return GaussianBlur(channel, 2*kernel_size+1)(image).to(device)
+
+
+class GaussianBlur(nn.Module):
+    def __init__(self, channels, kernel_size):
+        super(GaussianBlur, self).__init__()
+        # gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
+        # gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
+        x = np.linspace(-1, 1, kernel_size+1)
+        kern1d = np.diff(st.norm.cdf(x))
+        kern2d = np.outer(kern1d, kern1d)
+        kern2d = kern2d/kern2d.sum()
+        kern2d = torch.Tensor(kern2d)
+
+        kern2d = kern2d.view(1, 1, kernel_size, kernel_size)
+        kern2d = kern2d.repeat(channels, 1, 1, 1)
+
+        self.gaussian_filter = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=kernel_size, groups=channels, bias=False)
+
+        self.gaussian_filter.weight.data = kern2d
+
+    def forward(self, x):
+        return self.gaussian_filter(x)
+
+

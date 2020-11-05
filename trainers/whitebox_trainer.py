@@ -4,8 +4,8 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from data_loaders import CartoonDataLoader
-from utils import MetricTracker, guided_filter, color_shift, superpixel
+from data_loaders import CartoonDataLoader, WhiteboxDataLoader
+from utils import MetricTracker, guided_filter, color_shift, superpixel, imageblur
 import torchvision.models as models
 
 
@@ -18,7 +18,7 @@ class WhiteboxTrainer(BaseTrainer):
         self.log_step = int(np.sqrt(self.train_dataloader.batch_size))
 
         self.logger.info("Creating model architecture...")
-        gen, disc_blur, disc_gray, vgg16 = self._build_model()
+        gen, disc_blur, disc_gray = self._build_model()
         # resume
         if self.config.resume is not None:
             self._resume_checkpoint(config.resume)
@@ -26,15 +26,15 @@ class WhiteboxTrainer(BaseTrainer):
         self.gen = gen.to(self.device)
         self.disc_blur = disc_blur.to(self.device)
         self.disc_gray = disc_gray.to(self.device)
-        self.vgg16 = vgg16.to(self.device)
+        # self.vgg16 = vgg16.to(self.device)
         if len(self.device_ids) > 1:
             self.gen = torch.nn.DataParallel(self.gen, device_ids=self.device_ids)
             self.disc_blur = torch.nn.DataParallel(self.disc_blur, device_ids=self.device_ids)
             self.disc_gray = torch.nn.DataParallel(self.disc_gray, device_ids=self.device_ids)
-            self.vgg16 = torch.nn.DataParallel(self.vgg16, device_ids=self.device_ids)
+            # self.vgg16 = torch.nn.DataParallel(self.vgg16, device_ids=self.device_ids)
 
         self.logger.info("Creating optimizers...")
-        self.gen_optim, self.disc_optim = self._build_optimizer(self.gen, self.disc)
+        self.gen_optim, self.disc_blur_optim ,self.disc_gray_optim = self._build_optimizer(self.gen, self.disc_blur, self.disc_gray)
 
         # build loss
         self.logger.info("Creating losses...")
@@ -44,7 +44,7 @@ class WhiteboxTrainer(BaseTrainer):
         self._build_metrics()
 
     def _build_dataloader(self):
-        train_dataloader = CartoonDataLoader(
+        train_dataloader = WhiteboxDataLoader(
             data_dir=self.config.data_dir,
             src_style='real',
             tar_style=self.config.tar_style,
@@ -59,28 +59,34 @@ class WhiteboxTrainer(BaseTrainer):
         gen = Generator(self.config.image_size, self.config.down_size, self.config.num_res, self.config.skip_conn)
         disc_blur = Discriminator(self.config.image_size, self.config.down_size)
         disc_gray = Discriminator(self.config.image_size, self.config.down_size)
-        vgg16 = models.vgg16()
-        return gen, disc_blur, disc_gray, vgg16
+        # vgg16 = models.vgg16()
+        return gen, disc_blur, disc_gray
 
-    def _build_optimizer(self, gen, disc):
+    def _build_optimizer(self, gen, disc_blur, disc_gray):
         """ build generator and discriminator optimizers """
         gen_optim = torch.optim.AdamW(
             gen.parameters(),
             lr=self.config.g_lr,
             weight_decay=self.config.weight_decay,
             betas=(0.5, 0.999))
-        disc_optim = torch.optim.AdamW(
-            disc.parameters(),
+        disc_blur_optim = torch.optim.AdamW(
+            disc_blur.parameters(),
             lr=self.config.d_lr,
             weight_decay=self.config.weight_decay,
             betas=(0.5, 0.999))
-        return gen_optim, disc_optim
+        disc_gray_optim = torch.optim.AdamW(
+            disc_gray.parameters(),
+            lr=self.config.d_lr,
+            weight_decay=self.config.weight_decay,
+            betas=(0.5, 0.999))
+        return gen_optim, disc_blur_optim, disc_gray_optim
 
     def _build_criterion(self):
         self.adv_criterion = eval('{}Loss'.format(self.config.adv_criterion))()
         # TODO add extra criterion you need here
         self.tv_loss = eval('TVLoss')()
-        self.vgg_loss = eval('VGGPerceptualLoss')()
+        # self.vgg_loss = eval('VGGPerceptualLoss')()
+        self.vgg_loss = VGGPerceptualLoss().to(self.device)
 
     def _build_metrics(self):
         # TODO: add the loss you want to log here
@@ -97,13 +103,14 @@ class WhiteboxTrainer(BaseTrainer):
         self.gen.train()
         self.disc_blur.train()
         self.disc_gray.train()
-        self.vgg16.train()
+        # self.vgg16.train()
         self.train_metrics.reset()
 
-        for batch_idx, (src_imgs, tar_imgs) in enumerate(self.train_dataloader):
-            src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
+        for batch_idx, (src_imgs, tar_imgs, superpixel_img) in enumerate(self.train_dataloader):
+            src_imgs, tar_imgs, superpixel_img = src_imgs.to(self.device), tar_imgs.to(self.device), superpixel_img.to(self.device)
             self.gen_optim.zero_grad()
-            self.disc_optim.zero_grad()
+            self.disc_blur_optim.zero_grad()
+            self.disc_gray_optim.zero_grad()
 
             # raise NotImplementedError
 
@@ -114,11 +121,14 @@ class WhiteboxTrainer(BaseTrainer):
             # ============ train D ============ #
             
             output_image_detach = output_image_raw.detach() 
-            output_image_detach = guided_filter(src_imgs, output_image_detach, r=1)
+            # output_image_detach = guided_filter(src_imgs, output_image_detach, r=1)
+            output_image_detach = imageblur(1, src_imgs, self.device)
 
-            blur_gen_detach = guided_filter(output_image_detach, output_image_detach, r=5, eps=2e-1)
+            # blur_gen_detach = guided_filter(output_image_detach, output_image_detach, r=5, eps=2e-1)
             # blur_real = guided_filter(src_imgs, src_imgs, r=5, eps=2e-1)
-            blur_cart = guided_filter(tar_imgs, tar_imgs, r=5, eps=2e-1)
+            # blur_cart = guided_filter(tar_imgs, tar_imgs, r=5, eps=2e-1)
+            blur_gen_detach = imageblur(5, output_image_detach, self.device)
+            blur_cart = imageblur(5, tar_imgs, self.device)
 
             gray_gen_detach = color_shift(output_image_detach)
             # gray_real = color_shift(src_imgs)
@@ -129,26 +139,29 @@ class WhiteboxTrainer(BaseTrainer):
 
             total_disc = disc_blur_loss + disc_gray_loss
             total_disc.backward()
-            self.disc_optim.step()
+            self.disc_blur_optim.step()
+            self.disc_gray_optim.step()
 
             # ============ train G ============ #
 
             tv_loss = self.tv_loss(output_image)
             
-            output_image = guided_filter(src_imgs, output_image_raw, r=1)
-            blur_gen = guided_filter(output_image, output_image, r=5, eps=2e-1)
+            # output_image = guided_filter(src_imgs, output_image_raw, r=1)
+            # blur_gen = guided_filter(output_image, output_image, r=5, eps=2e-1)
+            output_image = imageblur(1, src_imgs, self.device)
+            blur_gen = imageblur(5, output_image, self.device)
             gray_gen = color_shift(output_image)
             
             gen_blur_loss = self.adv_criterion(blur_gen, real=True)
             gen_gray_loss = self.adv_criterion(gray_gen, real=True)
 
-            vgg_real = self.vgg16(src_imgs)
-            vgg_out = self.vgg16(output_image)
-            src_superpixel = superpixel(src_imgs)
-            vgg_superpixel = self.vgg16(src_superpixel)
+            # vgg_real = self.vgg16(src_imgs)
+            # vgg_out = self.vgg16(output_image)
+            # src_superpixel = superpixel(src_imgs)
+            # vgg_superpixel = self.vgg16(src_superpixel)
 
-            real_loss = self.vgg_loss(vgg_real, vgg_out)
-            superpixel_loss = self.vgg_loss(vgg_superpixel, vgg_out)
+            real_loss = self.vgg_loss(src_imgs, output_image)
+            superpixel_loss = self.vgg_loss(superpixel_img, output_image)
 
             recon_loss = real_loss + superpixel_loss
 
@@ -192,7 +205,7 @@ class WhiteboxTrainer(BaseTrainer):
         self.gen.eval()
         self.disc_blur.eval()
         self.disc_gray.eval()
-        self.vgg16.eval()
+        # self.vgg16.eval()
 
         disc_blur_losses = []
         disc_gray_losses = []
@@ -204,8 +217,8 @@ class WhiteboxTrainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
 
-            for batch_idx, (src_imgs, tar_imgs) in enumerate(self.valid_dataloader):
-                src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
+            for batch_idx, (src_imgs, tar_imgs, superpixel_img) in enumerate(self.valid_dataloader):
+                src_imgs, tar_imgs, superpixel_img = src_imgs.to(self.device), tar_imgs.to(self.device), superpixel_img.to(self.device)
 
                 # TODO similar to train but not optimizer.step()
                 # raise NotImplementedError
@@ -214,10 +227,13 @@ class WhiteboxTrainer(BaseTrainer):
                 # ============ D Loss ============ #
 
                 output_image_detach = output_image_raw.detach() 
-                output_image_detach = guided_filter(src_imgs, output_image_detach, r=1)
+                # output_image_detach = guided_filter(src_imgs, output_image_detach, r=1)
+                output_image_detach = imageblur(1, src_imgs, self.device)
 
-                blur_gen_detach = guided_filter(output_image_detach, output_image_detach, r=5, eps=2e-1)
-                blur_cart = guided_filter(tar_imgs, tar_imgs, r=5, eps=2e-1)
+                # blur_gen_detach = guided_filter(output_image_detach, output_image_detach, r=5, eps=2e-1)
+                # blur_cart = guided_filter(tar_imgs, tar_imgs, r=5, eps=2e-1)
+                blur_gen_detach = imageblur(5, output_image_detach, self.device)
+                blur_cart = imageblur(5, tar_imgs, self.device)
 
                 gray_gen_detach = color_shift(output_image_detach)
                 gray_cart = color_shift(tar_imgs)
@@ -231,20 +247,22 @@ class WhiteboxTrainer(BaseTrainer):
 
                 tv_loss = self.tv_loss(output_image)
             
-                output_image = guided_filter(src_imgs, output_image_raw, r=1)
-                blur_gen = guided_filter(output_image, output_image, r=5, eps=2e-1)
+                # output_image = guided_filter(src_imgs, output_image_raw, r=1)
+                # blur_gen = guided_filter(output_image, output_image, r=5, eps=2e-1)
+                output_image = imageblur(1, src_imgs, self.device)
+                blur_gen = imageblur(5, output_image, self.device)
                 gray_gen = color_shift(output_image)
             
                 gen_blur_loss = self.adv_criterion(blur_gen, real=True)
                 gen_gray_loss = self.adv_criterion(gray_gen, real=True)
 
-                vgg_real = self.vgg16(src_imgs)
-                vgg_out = self.vgg16(output_image)
-                src_superpixel = superpixel(src_imgs)
-                vgg_superpixel = self.vgg16(src_superpixel)
+                # vgg_real = self.vgg16(src_imgs)
+                # vgg_out = self.vgg16(output_image)
+                # src_superpixel = superpixel(src_imgs)
+                # vgg_superpixel = self.vgg16(src_superpixel)
 
-                real_loss = self.vgg_loss(vgg_real, vgg_out)
-                superpixel_loss = self.vgg_loss(vgg_superpixel, vgg_out)
+                real_loss = self.vgg_loss(src_imgs, output_image)
+                superpixel_loss = self.vgg_loss(superpixel_img, output_image)
 
                 recon_loss = real_loss + superpixel_loss
 
@@ -291,9 +309,10 @@ class WhiteboxTrainer(BaseTrainer):
             'gen_state_dict': self.gen.state_dict() if len(self.device_ids) <= 1 else self.gen.module.state_dict(),
             'disc_blur_state_dict': self.disc_blur.state_dict() if len(self.device_ids) <= 1 else self.disc_blur.module.state_dict(),
             'disc_gray_state_dict': self.disc_gray.state_dict() if len(self.device_ids) <= 1 else self.disc_gray.module.state_dict(),
-            'disc_vgg16_dict': self.vgg16.state_dict() if len(self.device_ids) <= 1 else self.vgg16.module.state_dict(),
+            # 'disc_vgg16_dict': self.vgg16.state_dict() if len(self.device_ids) <= 1 else self.vgg16.module.state_dict(),
             'gen_optim': self.gen_optim.state_dict(),
-            'disc_optim': self.disc_optim.state_dict()
+            'disc_blur_optim': self.disc_blur_optim.state_dict(),
+            'disc_gray_optim': self.disc_gray_optim.state_dict()
         }
         filename = str(self.config.checkpoint_dir + 'current.pth')
         torch.save(state, filename)
@@ -319,9 +338,12 @@ class WhiteboxTrainer(BaseTrainer):
         self.gen.load_state_dict(checkpoint['gen_state_dict'])
         self.disc_blur.load_state_dict(checkpoint['disc_blur_state_dict'])
         self.disc_gray.load_state_dict(checkpoint['disc_gray_state_dict'])
-        self.vgg16.load_state_dict(checkpoint['disc_vgg16_dict'])
+        # self.vgg16.load_state_dict(checkpoint['disc_vgg16_dict'])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
         self.gen_optim.load_state_dict(checkpoint['gen_optim'])
-        self.disc_optim.load_state_dict(checkpoint['disc_optim'])
+        # self.disc_optim.load_state_dict(checkpoint['disc_optim'])
+        self.disc_blur_optim.load_state_dict(checkpoint['disc_blur_optim'])
+        self.disc_gray_optim.load_state_dict(checkpoint['disc_gray_optim'])
+
         self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))
