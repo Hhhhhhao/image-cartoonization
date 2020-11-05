@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 def DiffAugment(x, policy='', channels_first=True):
     if policy:
+        x = (x + 1) / 2
         if not channels_first:
             x = x.permute(0, 3, 1, 2)
         for p in policy.split(','):
@@ -16,6 +17,7 @@ def DiffAugment(x, policy='', channels_first=True):
         if not channels_first:
             x = x.permute(0, 2, 3, 1)
         x = x.contiguous()
+        x = x * 2 - 1
     return x
 
 
