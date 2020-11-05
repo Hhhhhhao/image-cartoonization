@@ -108,6 +108,8 @@ class WhiteboxTrainer(BaseTrainer):
             fake_tar_imgs = self.gen(src_imgs)
 
             # ============ train G ============ #
+            self.set_requires_grad(self.disc_gray, requires_grad=False)
+            self.set_requires_grad(self.disc_blur, requires_grad=False)
             tv_loss = self.tv_loss(fake_tar_imgs)
 
             # surface representation
@@ -133,9 +135,11 @@ class WhiteboxTrainer(BaseTrainer):
             self.gen_optim.step()
 
             # ============ train D ============ #
+            self.set_requires_grad(self.disc_gray, requires_grad=True)
+            self.set_requires_grad(self.disc_blur, requires_grad=True)
 
             # surface representation
-            blur_fake_tar = guided_filter(fake_tar_imgs.detach(), fake_tar_imgs, r=5, eps=2e-1)
+            blur_fake_tar = guided_filter(fake_tar_imgs.detach(), fake_tar_imgs.detach(), r=5, eps=2e-1)
             blur_real_tar = guided_filter(tar_imgs, tar_imgs, r=5, eps=2e-1)
             blur_fake_logits = self.disc_blur(DiffAugment(blur_fake_tar, policy=self.config.data_aug_policy))
             blur_real_logits = self.disc_blur(DiffAugment(blur_real_tar, policy=self.config.data_aug_policy))
@@ -165,7 +169,7 @@ class WhiteboxTrainer(BaseTrainer):
             self.train_metrics.update('gen_tv_loss', tv_loss.item())
 
             if batch_idx % self.log_step == 0:
-                self.logger.info('Train Epoch: {:d} {:d} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
+                self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
                     epoch,
                     self._progress(batch_idx),
                     total_disc.item(),
