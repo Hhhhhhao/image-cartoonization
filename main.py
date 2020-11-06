@@ -2,6 +2,7 @@ import argparse
 from utils import process_config
 from trainers import build_trainer
 
+
 def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 

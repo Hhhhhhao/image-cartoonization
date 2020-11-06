@@ -180,7 +180,7 @@ class WhiteboxTrainer(BaseTrainer):
         val_log = self._valid_epoch(epoch)
         log.update(**{'val_'+k : v for k, v in val_log.items()})
         # shuffle data loader
-        self.train_dataloader.shuffle()
+        self.train_dataloader.shuffle_dataset()
         return log
 
     def _valid_epoch(self, epoch):
