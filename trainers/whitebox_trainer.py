@@ -106,6 +106,7 @@ class WhiteboxTrainer(BaseTrainer):
 
             # ============ Generation ============ #
             fake_tar_imgs = self.gen(src_imgs)
+            fake_tar_imgs = guided_filter(src_imgs, fake_tar_imgs, r=1)
 
             # ============ train G ============ #
             self.set_requires_grad(self.disc_gray, requires_grad=False)
@@ -130,7 +131,7 @@ class WhiteboxTrainer(BaseTrainer):
             # structure loss
             content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-            total_gen = 1e4 * tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 2e2 * content_loss + superpixel_loss
+            total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * (content_loss + superpixel_loss)
             total_gen.backward()
             self.gen_optim.step()
 
@@ -231,7 +232,7 @@ class WhiteboxTrainer(BaseTrainer):
                 # structure loss
                 content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-                total_gen = 1e4 * tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 2e2 * content_loss + superpixel_loss
+                total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * (content_loss + superpixel_loss)
 
                 # ============ train D ============ #
 

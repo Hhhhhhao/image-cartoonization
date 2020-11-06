@@ -43,12 +43,14 @@ class VGGPerceptualLoss(nn.Module):
         for i, block in enumerate(self.blocks):
             x = block(x)
             y = block(y)
-            if i in [2, 3]:
+            if i == 2:
                 loss += torch.nn.functional.l1_loss(x, y)
         return loss
 
 
 if __name__ == '__main__':
     model = vgg16(pretrained=True)
-    print(model)
-    print(model.features)
+    print(":4", model.features[:4])
+    print("4:9", model.features[4:9])
+    print("9:16", model.features[9:16])
+    print("16:23", model.features[16:23])
