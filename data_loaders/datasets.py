@@ -3,7 +3,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 from utils.cartoongan import smooth_image_edges
-from utils.wb_utils import superpixel
+from utils.wb_utils import selective_adacolor
 
 
 class CartoonDataset(Dataset):
@@ -93,7 +93,7 @@ class WhiteboxDataset(CartoonDataset):
         tar_img = Image.open(os.path.join(self.data_dir, tar_path))
         src_img = src_img.convert('RGB')
         tar_img = tar_img.convert('RGB')
-        superpixel_img = superpixel(src_img)
+        superpixel_img = selective_adacolor(np.asarray(src_img), power=1.2)
         superpixel_img = Image.fromarray(superpixel_img)
 
         # transform src img
@@ -106,12 +106,18 @@ class WhiteboxDataset(CartoonDataset):
         return src_img, tar_img, superpixel_img
 
 
-
 if __name__ == '__main__':
     from tqdm import tqdm
     data_dir = '/home/zhaobin/cartoon/'
-    style = 'tangqian'
-    dataset = CartoonGANDataset(data_dir, style)
+    style = 'real'
+    dataset = WhiteboxDataset(data_dir, style)
+    import matplotlib.pyplot as plt
 
     for i in tqdm(range(len(dataset)), total=len(dataset)):
-        src_img, tar_img, smooth_tar_img = dataset.__getitem__(i)
+        src_img, tar_img, superpixel_img = dataset.__getitem__(i)
+        plt.imshow(src_img)
+        plt.show()
+        plt.imshow(superpixel_img)
+        plt.show()
+
+

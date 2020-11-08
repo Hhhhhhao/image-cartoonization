@@ -4,8 +4,8 @@ import numpy as np
 from base import BaseTrainer
 from models import Generator, Discriminator
 from losses import *
-from data_loaders import WhiteboxDataLoader, DiffAugment
-from utils import MetricTracker, guided_filter, color_shift, superpixel, imageblur
+from data_loaders import CartoonDataLoader, DiffAugment
+from utils import MetricTracker, guided_filter, color_shift, superpixel
 
 
 class WhiteboxTrainer(BaseTrainer):
@@ -41,7 +41,7 @@ class WhiteboxTrainer(BaseTrainer):
         self._build_metrics()
 
     def _build_dataloader(self):
-        train_dataloader = WhiteboxDataLoader(
+        train_dataloader = CartoonDataLoader(
             data_dir=self.config.data_dir,
             src_style='real',
             tar_style=self.config.tar_style,
@@ -98,8 +98,8 @@ class WhiteboxTrainer(BaseTrainer):
         self.disc_gray.train()
         self.train_metrics.reset()
 
-        for batch_idx, (src_imgs, tar_imgs, superpixel_img) in enumerate(self.train_dataloader):
-            src_imgs, tar_imgs, superpixel_img = src_imgs.to(self.device), tar_imgs.to(self.device), superpixel_img.to(self.device)
+        for batch_idx, (src_imgs, tar_imgs) in enumerate(self.train_dataloader):
+            src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
             self.gen_optim.zero_grad()
             self.disc_blur_optim.zero_grad()
             self.disc_gray_optim.zero_grad()
@@ -125,13 +125,10 @@ class WhiteboxTrainer(BaseTrainer):
             gen_surface_loss = self.adv_criterion(disc_blur_fake_logits, real=True)
             gen_texture_loss = self.adv_criterion(disc_gray_fake_logits, real=True)
 
-            # structure loss (from superpixel)
-            superpixel_loss = self.vgg_loss(fake_tar_imgs, superpixel_img)
-
             # structure loss
             content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-            total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * (content_loss + superpixel_loss)
+            total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * content_loss
             total_gen.backward()
             self.gen_optim.step()
 
@@ -166,7 +163,7 @@ class WhiteboxTrainer(BaseTrainer):
             self.train_metrics.update('disc_gray_loss', disc_gray_loss.item())
             self.train_metrics.update('gen_blur_loss', gen_surface_loss.item())
             self.train_metrics.update('gen_gray_loss', gen_texture_loss.item())
-            self.train_metrics.update('gen_recon_loss', content_loss.item() + superpixel_loss.item())
+            self.train_metrics.update('gen_recon_loss', content_loss.item())
             self.train_metrics.update('gen_tv_loss', tv_loss.item())
 
             if batch_idx % self.log_step == 0:
@@ -205,8 +202,8 @@ class WhiteboxTrainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
 
-            for batch_idx, (src_imgs, tar_imgs, superpixel_img) in enumerate(self.valid_dataloader):
-                src_imgs, tar_imgs, superpixel_img = src_imgs.to(self.device), tar_imgs.to(self.device), superpixel_img.to(self.device)
+            for batch_idx, (src_imgs, tar_imgs) in enumerate(self.valid_dataloader):
+                src_imgs, tar_imgs = src_imgs.to(self.device), tar_imgs.to(self.device)
 
                 # ============ Generation ============ #
                 fake_tar_imgs = self.gen(src_imgs)
@@ -226,13 +223,10 @@ class WhiteboxTrainer(BaseTrainer):
                 gen_surface_loss = self.adv_criterion(disc_blur_fake_logits, real=True)
                 gen_texture_loss = self.adv_criterion(disc_gray_fake_logits, real=True)
 
-                # structure loss (from superpixel)
-                superpixel_loss = self.vgg_loss(fake_tar_imgs, superpixel_img)
-
                 # structure loss
                 content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-                total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * (content_loss + superpixel_loss)
+                total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + content_loss
 
                 # ============ train D ============ #
 
@@ -255,12 +249,11 @@ class WhiteboxTrainer(BaseTrainer):
 
                 total_disc = disc_blur_loss + disc_gray_loss
 
-
                 disc_blur_losses.append(disc_blur_loss.item())
                 disc_gray_losses.append(disc_gray_loss.item())
                 gen_blur_losses.append(gen_surface_loss.item())
                 gen_gray_losses.append(gen_texture_loss.item())
-                gen_recon_losses.append(content_loss.item() + superpixel_loss.item())
+                gen_recon_losses.append(content_loss.item())
                 gen_tv_losses.append(tv_loss.item())
                 gen_losses.append(total_gen.item())
                 disc_losses.append(total_disc.item())
