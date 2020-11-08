@@ -1,7 +1,8 @@
 import argparse
 from utils import process_config
 from trainers import build_trainer
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')

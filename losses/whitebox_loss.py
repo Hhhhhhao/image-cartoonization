@@ -14,4 +14,4 @@ class TVLoss(nn.Module):
         b, c, h, w = x.size()
         h_tv = torch.pow((x[:,:,1:,:]-x[:,:,:h-1,:]),2)
         w_tv = torch.pow((x[:,:,:,1:]-x[:,:,:,:w-1]),2)
-        return (h_tv + w_tv) / (c * h * w)
+        return h_tv / (c * h * w).mean() + w_tv / (c * h * w).mean()
