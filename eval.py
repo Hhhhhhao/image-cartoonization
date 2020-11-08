@@ -81,15 +81,15 @@ def main():
             src_imgs = (src_imgs * 255).astype(np.uint8)
 
             for src_img, tar_img in zip(src_imgs, tar_imgs):
-                cv2.imwrite('tar_{}.png'.format(count), tar_img)
-                cv2.imwrite('src_{}.png'.format(count), src_img)
+                cv2.imwrite(os.path.join(image_dir, '{}_tar.png'.format(count)), tar_img[:, :, ::-1])
+                cv2.imwrite(os.path.join(image_dir, '{}_src.png'.format(count)), src_img[:, :, ::-1])
                 count += 1
 
     del model
     del data_loader
 
 
-    result_file = open('{}/result_{}.txt'.format(result_dir, image_size), "w")
+    result_file = open('{}/{}2_{}_result_{}.txt'.format(result_dir, config.src_style, config.tar_style, image_size), "w")
 
     # calculate fid score
     results = calculate_fid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')

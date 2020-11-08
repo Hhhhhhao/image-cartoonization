@@ -222,7 +222,7 @@ def _compute_activations(path, model, batch_size, dims, cuda, model_type):
 
     if type(path) == str:
         paths = []
-        if path.endwiths('.txt'):
+        if path.endswith('.txt'):
             with open(path, "r") as f:
                 lines = f.readlines()
                 for line in lines:
