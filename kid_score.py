@@ -108,15 +108,24 @@ def extract_lenet_features(imgs, net):
 
 
 def _compute_activations(path, model, batch_size, dims, cuda, model_type):
-    if not type(path) == np.ndarray:
-        import glob
-        jpg = os.path.join(path, '*.jpg')
-        png = os.path.join(path, '*.png')
-        path = glob.glob(jpg) + glob.glob(png)
-        if len(path) > 50000:
-            import random
-            random.shuffle(path)
-            path = path[:50000]
+    if type(path) == str:
+        paths = []
+        if path.endswith('.txt'):
+            with open(path, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    paths.append(os.path.join('/home/zhaobin/cartoon', line.strip()))
+            path = list(paths)
+        else:
+            import glob
+            jpg = os.path.join(path, '*.jpg')
+            png = os.path.join(path, '*.png')
+            path = glob.glob(jpg) + glob.glob(png)
+            if len(path) > 25000:
+                import random
+                random.shuffle(path)
+                path = path[:25000]
+
     if model_type == 'inception':
         act = get_activations(path, model, batch_size, dims, cuda)
     elif model_type == 'lenet':
@@ -130,7 +139,7 @@ def calculate_kid_given_paths(paths, batch_size, cuda, dims, model_type='incepti
     for p in paths:
         if not os.path.exists(p):
             raise RuntimeError('Invalid path: %s' % p)
-        if os.path.isdir(p):
+        if os.path.isdir(p) or os.path.isfile(p):
             pths.append(p)
         elif p.endswith('.npy'):
             np_imgs = np.load(p)

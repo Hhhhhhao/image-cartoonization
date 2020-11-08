@@ -4,20 +4,25 @@ import argparse
 import torch
 from easydict import EasyDict as edict
 from tqdm import tqdm
-from data_loaders import
+from data_loaders import CartoonTestDataLoader
 from models import Generator
 from utils.misc import read_json
-
+import numpy as np
+import cv2
+from fid_score import calculate_fid_given_paths
+from kid_score import calculate_kid_given_paths
 
 def get_config(manual=None):
     parser = argparse.ArgumentParser('Image Cartoon')
     # basic options
-    parser.add_argument('--checkpoint-path', default='', help='checkpoint path')
+    parser.add_argument('--checkpoint-path', default='experiments/cyclegan_color_translation_cutout_real_gongqijun_128_bs12_glr0.0001_dlr0.0002_wd0.0001_201106_025817/checkpoints/current.pth', help='checkpoint path')
+    parser.add_argument('--image-size', default='256', type=int, help='image size')
     return parser.parse_args(manual)
 
 
 def main():
     config = get_config()
+    image_size = config.image_size
 
     # find config.json in checkpoint folder
     checkpoint_path = os.path.join(working_dir, config.checkpoint_path)
@@ -34,45 +39,71 @@ def main():
     # load config
     config = read_json(os.path.join(exp_dir, 'config.json'))
     config = edict(config)
-
-    # set parameters of config
-    config.num_workers = 0
+    image_dir = os.path.join(result_dir, '{}2{}_{}'.format(config.src_style, config.tar_style, image_size))
+    if not os.path.exists(image_dir):
+        os.mkdir(image_dir)
 
     # build dataloader
-    data_loader =
+    data_loader = CartoonTestDataLoader(
+        data_dir=config.data_dir,
+        style=config.src_style,
+        image_size=image_size,
+        batch_size=config.batch_size,
+        num_workers=config.num_workers)
 
     # build model
     model = Generator(config.image_size, config.down_size, config.num_res, config.skip_conn)
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint['gen_state_dict'])
+    if config.exp_name == 'cyclegan':
+        model.load_state_dict(checkpoint['gen_src_tar_state_dict'])
+    else:
+        model.load_state_dict(checkpoint['gen_state_dict'])
     model.to(device)
     model.eval()
 
     # start evaluation
     print("start evaluation")
-    results = []
+    count = 0
     with torch.no_grad():
-        for batch_idx, (uttr, uttr_len) in tqdm(enumerate(data_loader), total=len(data_loader)):
-            uttr = uttr.to(device)
-            uttr_len = uttr_len.to(device)
+        for batch_idx, src_imgs in tqdm(enumerate(data_loader), total=len(data_loader)):
+            src_imgs = src_imgs.to(device)
+            tar_imgs = model(src_imgs)
 
-            out, out_lens = model(uttr, uttr_len)
+            # save images
+            tar_imgs = tar_imgs.cpu().numpy().transpose(0, 2, 3, 1)
+            # convert from [-1, 1] to [0, 255] uint
+            tar_imgs = (tar_imgs + 1) / 2
+            tar_imgs = (tar_imgs * 255).astype(np.uint8)
 
-            # decode
-            pred_phon, _, _, pred_phon_lens = beam_decoder.decode(out.transpose(0, 1), out_lens)
-            best_phon = pred_phon[:, 0].cpu().numpy()
-            best_phon_lens = pred_phon_lens[:, 0].cpu().numpy()
+            src_imgs = src_imgs.cpu().numpy().transpose(0, 2, 3, 1)
+            # convert from [-1, 1] to [0, 255] uint
+            src_imgs = (src_imgs + 1) / 2
+            src_imgs = (src_imgs * 255).astype(np.uint8)
 
-            for i in range(best_phon.shape[0]):
-                # convert to string
-                hypo = best_phon[i, :best_phon_lens[i]]
-                phoneme = ''.join(PHONEME_MAP[idx] for idx in hypo)
-                results.append(phoneme)
+            for src_img, tar_img in zip(src_imgs, tar_imgs):
+                cv2.imwrite('tar_{}.png'.format(count), tar_img)
+                cv2.imwrite('src_{}.png'.format(count), src_img)
+                count += 1
 
-    with open(os.path.join(result_dir, 'test_result.csv'), "w") as f:
-        f.write('id,label\n')
-        for i, phoneme in enumerate(results):
-            f.write('{:d},{:s}\n'.format(i, phoneme))
+    del model
+    del data_loader
+
+
+    result_file = open('{}/result_{}.txt'.format(result_dir, image_size), "w")
+
+    # calculate fid score
+    results = calculate_fid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
+    for p, m, s in results:
+        line = 'FID (%s): %.2f (%.3f)\n' % (p, m, s)
+        result_file.write(line)
+        print(line)
+
+    # calculate kid score
+    results = calculate_kid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
+    for p, m, s in results:
+        line = 'KID (%s): %.2f (%.3f)\n' % (p, m, s)
+        result_file.write(line)
+        print(line)
 
 
 if __name__ == '__main__':

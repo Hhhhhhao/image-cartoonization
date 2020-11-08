@@ -56,6 +56,36 @@ class CartoonDataset(Dataset):
         return src_img, tar_img
 
 
+class CartoonTestDataset(Dataset):
+    def __init__(self, data_dir, style='real', transform=None):
+        self.data_dir = data_dir
+        self.data = self._load_data(data_dir, style)
+        print("total {} {} images for testing".format(len(self.data), style))
+        self.transform = transform
+
+    def _load_data(self, data_dir, style):
+        data = []
+        with open(os.path.join(data_dir, '{}_test.txt'.format(style)), 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                path = line.strip()
+                data.append(path)
+        return data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        path = self.data[index]
+        img = Image.open(os.path.join(self.data_dir, path))
+        img = img.convert('RGB')
+
+        # transform src img
+        if self.transform is not None:
+            img = self.transform(img)
+        return img
+
+
 class CartoonGANDataset(CartoonDataset):
     def __init__(self, data_dir, src_style='real', tar_style='gongqijun', src_transform=None, tar_transform=None):
         super(CartoonGANDataset, self).__init__(data_dir, src_style, tar_style, src_transform, tar_transform)
