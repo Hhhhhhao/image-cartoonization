@@ -2,6 +2,7 @@ import argparse
 from utils import process_config
 from trainers import build_trainer
 
+
 def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 
@@ -38,6 +39,9 @@ def init_config():
     # ================== extra options: add parameters in your experiements here =========================
     # cyclegan
     parser.add_argument('--lambda-rec', type=float, default=0.1, help='cycle rec. loss weight')
+
+    # whiteboxgan
+    parser.add_argument('--lambda-tv', type=float, default=1, help='total variance loss')
 
     return parser.parse_args()
 

@@ -3,7 +3,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 from utils.cartoongan import smooth_image_edges
-from utils.wb_utils import selective_adacolor
+from utils.wb_utils import superpixel
 
 
 class CartoonDataset(Dataset):
@@ -112,34 +112,10 @@ class CartoonGANDataset(CartoonDataset):
         return src_img, tar_img, smooth_tar_img
 
 
-class WhiteboxDataset(CartoonDataset):
-    def __init__(self, data_dir, src_style='real', tar_style='gongqijun', src_transform=None, tar_transform=None):
-        super(WhiteboxDataset, self).__init__(data_dir, src_style, tar_style, src_transform, tar_transform)
-
-    def __getitem__(self, index):
-        src_path = self.src_data[index]
-        tar_path = self.tar_data[index]
-        src_img = Image.open(os.path.join(self.data_dir, src_path))
-        tar_img = Image.open(os.path.join(self.data_dir, tar_path))
-        src_img = src_img.convert('RGB')
-        tar_img = tar_img.convert('RGB')
-        superpixel_img = selective_adacolor(np.asarray(src_img), power=1.2)
-        superpixel_img = Image.fromarray(superpixel_img)
-
-        # transform src img
-        if self.src_transform is not None:
-            src_img = self.src_transform(src_img)
-            superpixel_img = self.src_transform(superpixel_img)
-        # transform tar img
-        if self.tar_transform is not None:
-            tar_img = self.tar_transform(tar_img)
-        return src_img, tar_img, superpixel_img
-
-
 if __name__ == '__main__':
     from tqdm import tqdm
     data_dir = '/home/zhaobin/cartoon/'
-    style = 'real'
+    style = 'gongqijun'
     dataset = WhiteboxDataset(data_dir, style)
     import matplotlib.pyplot as plt
 

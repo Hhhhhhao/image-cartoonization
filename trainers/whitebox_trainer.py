@@ -111,7 +111,7 @@ class WhiteboxTrainer(BaseTrainer):
             # ============ train G ============ #
             self.set_requires_grad(self.disc_gray, requires_grad=False)
             self.set_requires_grad(self.disc_blur, requires_grad=False)
-            # tv_loss = self.tv_loss(fake_tar_imgs)
+            tv_loss = self.tv_loss(fake_tar_imgs)
 
             # surface representation
             blur_fake_tar = guided_filter(fake_tar_imgs, fake_tar_imgs, r=5, eps=2e-1)
@@ -126,10 +126,14 @@ class WhiteboxTrainer(BaseTrainer):
             gen_texture_loss = self.adv_criterion(disc_gray_fake_logits, real=True)
 
             # structure loss
+            fake_tar_imgs_superpixel = fake_tar_imgs.detach().cpu().numpy().transpose(0, 2, 3, 1)
+            fake_tar_imgs_superpixel = torch.from_numpy(superpixel(fake_tar_imgs_superpixel)).to(self.device)
+            structure_loss = self.vgg_loss(fake_tar_imgs, fake_tar_imgs_superpixel)
+
+            # content loss
             content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-            # total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + 10 * content_loss
-            total_gen = self.config.lambda_adv * (gen_surface_loss + gen_texture_loss) + self.config.lambda_rec * content_loss
+            total_gen = self.config.lambda_tv * tv_loss + self.config.lambda_adv * (gen_surface_loss + gen_texture_loss) + self.config.lambda_rec * (content_loss + structure_loss)
             total_gen.backward()
             self.gen_optim.step()
 
@@ -165,7 +169,9 @@ class WhiteboxTrainer(BaseTrainer):
             self.train_metrics.update('gen_blur_loss', gen_surface_loss.item())
             self.train_metrics.update('gen_gray_loss', gen_texture_loss.item())
             self.train_metrics.update('gen_recon_loss', content_loss.item())
-            # self.train_metrics.update('gen_tv_loss', tv_loss.item())
+            self.train_metrics.update('gen_tv_loss', tv_loss.item())
+            self.train_metrics.update('gen', total_gen.item())
+            self.train_metrics.update('disc', total_disc.item())
 
             if batch_idx % self.log_step == 0:
                 self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
@@ -210,7 +216,7 @@ class WhiteboxTrainer(BaseTrainer):
                 fake_tar_imgs = self.gen(src_imgs)
 
                 # ============ train G ============ #
-                # tv_loss = self.tv_loss(fake_tar_imgs)
+                tv_loss = self.tv_loss(fake_tar_imgs)
 
                 # surface representation
                 blur_fake_tar = guided_filter(fake_tar_imgs, fake_tar_imgs, r=5, eps=2e-1)
@@ -225,10 +231,14 @@ class WhiteboxTrainer(BaseTrainer):
                 gen_texture_loss = self.adv_criterion(disc_gray_fake_logits, real=True)
 
                 # structure loss
+                fake_tar_imgs_superpixel = fake_tar_imgs.detach().cpu().numpy().transpose(0, 2, 3, 1)
+                fake_tar_imgs_superpixel = torch.from_numpy(superpixel(fake_tar_imgs_superpixel)).to(self.device)
+                structure_loss = self.vgg_loss(fake_tar_imgs, fake_tar_imgs_superpixel)
+
+                # content loss
                 content_loss = self.vgg_loss(fake_tar_imgs, src_imgs)
 
-                # total_gen = tv_loss + 1e-1 * gen_surface_loss + gen_texture_loss + content_loss
-                total_gen = self.config.lambda_adv * (gen_surface_loss + gen_texture_loss) + self.config.lambda_rec * content_loss
+                total_gen = self.config.lambda_tv * tv_loss + self.config.lambda_adv * (gen_surface_loss + gen_texture_loss) + self.config.lambda_rec * (content_loss + structure_loss)
 
                 # ============ train D ============ #
 
@@ -256,7 +266,7 @@ class WhiteboxTrainer(BaseTrainer):
                 gen_blur_losses.append(gen_surface_loss.item())
                 gen_gray_losses.append(gen_texture_loss.item())
                 gen_recon_losses.append(content_loss.item())
-                # gen_tv_losses.append(tv_loss.item())
+                gen_tv_losses.append(tv_loss.item())
                 gen_losses.append(total_gen.item())
                 disc_losses.append(total_disc.item())
 

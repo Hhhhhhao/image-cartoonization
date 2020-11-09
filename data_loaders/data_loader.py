@@ -1,7 +1,7 @@
 from torchvision import transforms
 from base import BaseDataLoader
 from torch.utils.data import DataLoader
-from .datasets import CartoonDataset, CartoonGANDataset, WhiteboxDataset, CartoonTestDataset
+from .datasets import CartoonDataset, CartoonGANDataset, CartoonTestDataset
 
 
 def build_train_transform(style='real', image_size=256):
