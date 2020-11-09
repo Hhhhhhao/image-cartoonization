@@ -1,7 +1,7 @@
 from torchvision import transforms
 from base import BaseDataLoader
 from torch.utils.data import DataLoader
-from .datasets import CartoonDataset, CartoonGANDataset, CartoonTestDataset
+from .datasets import CartoonDataset, CartoonGANDataset, CartoonDefaultDataset, StarCartoonDataset
 
 
 def build_train_transform(style='real', image_size=256):
@@ -37,16 +37,17 @@ def build_test_transform(style='real', image_size=256):
     return transform
 
 
-class CartoonTestDataLoader(DataLoader):
+class CartoonDefaultDataLoader(DataLoader):
     def __init__(self, data_dir, style='real', image_size=256, batch_size=16, num_workers=4):
         transform = build_test_transform(style, image_size)
-        self.dataset = CartoonTestDataset(data_dir=data_dir, style=style, transform=transform)
-        super(CartoonTestDataLoader, self).__init__(
+        self.dataset = CartoonDefaultDataset(data_dir=data_dir, style=style, transform=transform)
+        super(CartoonDefaultDataLoader, self).__init__(
             dataset=self.dataset,
             batch_size=batch_size,
             shuffle=False,
             num_workers=num_workers,
             drop_last=True)
+
 
 class CartoonDataLoader(BaseDataLoader):
     def __init__(self, data_dir, src_style='real', tar_style='gongqijun', image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
@@ -92,17 +93,15 @@ class CartoonGANDataLoader(BaseDataLoader):
         self.dataset._shuffle_data()
 
 
-class WhiteboxDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, src_style='real', tar_style='gongqijun', image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
-
+class StarCartoonDataLoader(BaseDataLoader):
+    def __init__(self, data_dir, image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
         # data augmentation
-        src_transform = build_train_transform(src_style, image_size)
-        tar_transform = build_train_transform(tar_style, image_size)
+        src_transform = build_train_transform('real', image_size)
+        tar_transform = build_train_transform('cartoon', image_size)
 
         # create dataset
-        self.dataset = WhiteboxDataset(data_dir, src_style, tar_style, src_transform, tar_transform)
-
-        super(WhiteboxDataLoader, self).__init__(
+        self.dataset = StarCartoonDataset(data_dir, src_transform, tar_transform)
+        super(StarCartoonDataLoader, self).__init__(
             dataset=self.dataset,
             batch_size=batch_size,
             shuffle=True,

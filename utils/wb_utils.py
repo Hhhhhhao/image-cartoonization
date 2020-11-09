@@ -22,16 +22,16 @@ def guided_filter(x, y, r, eps=1e-2):
 
     N = box_filter(torch.ones((1, 1, x_shape[2], x_shape[3])), r).to(x.device)
 
-    mean_x = box_filter(x, r) / N
-    mean_y = box_filter(y, r) / N
-    cov_xy = box_filter(x*y, r) / N - mean_x * mean_y
-    var_x = box_filter(x*x, r) /N - mean_x * mean_y
+    mean_x = box_filter(x, r) / (N + eps)
+    mean_y = box_filter(y, r) / (N + eps)
+    cov_xy = box_filter(x*y, r) / (N - mean_x * mean_y + eps)
+    var_x = box_filter(x*x, r) / (N - mean_x * mean_y + eps)
 
     A = cov_xy / (var_x + eps)
     b = mean_y - A * mean_x
 
-    mean_A = box_filter(A, r) / N
-    mean_b = box_filter(b, r) / N
+    mean_A = box_filter(A, r) / (N + eps)
+    mean_b = box_filter(b, r) / (N + eps)
 
     output = mean_A * x + mean_b
     return output
@@ -50,7 +50,7 @@ def color_shift(image1, mode='uniform'):
     r_weight = r_weight.to(image1.device)
     g_weight = g_weight.to(image1.device)
     b_weight = b_weight.to(image1.device)
-    output1 = (r_weight*r1 + g_weight*g1 + b_weight*b1) / (r_weight+g_weight+b_weight)  
+    output1 = (r_weight*r1 + g_weight*g1 + b_weight*b1) / (r_weight+g_weight+b_weight + 1e-12)
     return output1.unsqueeze(1).repeat(1, 3, 1, 1)
 
 

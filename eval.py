@@ -4,7 +4,7 @@ import argparse
 import torch
 from easydict import EasyDict as edict
 from tqdm import tqdm
-from data_loaders import CartoonTestDataLoader
+from data_loaders import CartoonDefaultDataset
 from models import Generator
 from utils.misc import read_json
 import numpy as np

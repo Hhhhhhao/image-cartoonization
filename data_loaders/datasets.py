@@ -1,9 +1,9 @@
 import os
+import random
 import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 from utils.cartoongan import smooth_image_edges
-from utils.wb_utils import superpixel
 
 
 class CartoonDataset(Dataset):
@@ -56,7 +56,7 @@ class CartoonDataset(Dataset):
         return src_img, tar_img
 
 
-class CartoonTestDataset(Dataset):
+class CartoonDefaultDataset(Dataset):
     def __init__(self, data_dir, style='real', transform=None):
         self.data_dir = data_dir
         self.data = self._load_data(data_dir, style)
@@ -112,18 +112,66 @@ class CartoonGANDataset(CartoonDataset):
         return src_img, tar_img, smooth_tar_img
 
 
+class StarCartoonDataset(Dataset):
+    def __init__(self, data_dir, real_transform=None, car_transform=None):
+        self.data_dir = data_dir
+        self.data = self._load_data(data_dir)
+        self.real_transform = real_transform
+        self.car_transform = car_transform
+
+    def _load_data(self, data_dir):
+        styles = ['real', 'gongqijun', 'xinhaicheng']
+        data = {}
+        for i, style in enumerate(styles):
+            data[i] = []
+            with open(os.path.join(data_dir, '{}_train.txt'.format(style)), 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    path = line.strip()
+                    data[i].append(path)
+        return data
+
+    def _shuffle_data(self):
+        for key, item in self.data.items():
+            np.random.shuffle(item)
+            self.data[key] = item
+
+    def __len__(self):
+        return len(self.data[0])
+
+    def __getitem__(self, index):
+        # sample a source
+        src_label = random.randint(0, 2)
+        # sample a target
+        tar_label = random.randint(0, 2)
+        src_path = self.data[src_label][index]
+        tar_path = self.data[tar_label][index]
+        src_img = Image.open(os.path.join(self.data_dir, src_path))
+        tar_img = Image.open(os.path.join(self.data_dir, tar_path))
+        src_img = src_img.convert('RGB')
+        tar_img = tar_img.convert('RGB')
+
+        if src_label == 0:
+            src_img = self.real_transform(src_img)
+        else:
+            src_img = self.car_transform(src_img)
+
+        if tar_label == 0:
+            tar_img = self.real_transform(tar_img)
+        else:
+            tar_img = self.car_transform(tar_img)
+
+        return src_img, src_label, tar_img, tar_label
+
+
 if __name__ == '__main__':
     from tqdm import tqdm
     data_dir = '/home/zhaobin/cartoon/'
     style = 'gongqijun'
-    dataset = WhiteboxDataset(data_dir, style)
+    dataset = StarCartoonDataset(data_dir)
     import matplotlib.pyplot as plt
 
     for i in tqdm(range(len(dataset)), total=len(dataset)):
-        src_img, tar_img, superpixel_img = dataset.__getitem__(i)
-        plt.imshow(src_img)
-        plt.show()
-        plt.imshow(superpixel_img)
-        plt.show()
+        src_img, tar_img, tar_label = dataset.__getitem__(i)
 
 
