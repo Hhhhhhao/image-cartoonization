@@ -57,9 +57,9 @@ class StarCartoonTrainer(BaseTrainer):
 
     def _build_model(self):
         gen = StarGenerator(self.config.image_size, self.config.down_size, self.config.num_res, self.config.skip_conn, self.config.style_size)
-        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=3)
-        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=3)
-        style_enc = StyleEncoder(image_size=self.config.image_size, style_dim=self.config.style_size, num_domains=3)
+        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=2)
+        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=2)
+        style_enc = StyleEncoder(image_size=self.config.image_size, style_dim=self.config.style_size, num_domains=2)
         return gen, disc, map_net, style_enc
 
     def _build_optimizer(self, gen, disc, map_net, style_enc):
@@ -72,6 +72,7 @@ class StarCartoonTrainer(BaseTrainer):
     def _build_criterion(self):
         self.adv_loss = eval('{}Loss'.format(self.config.adv_criterion))()
         self.cls_loss = torch.nn.CrossEntropyLoss()
+        self.rec_loss = VGGPerceptualLoss().to(self.device)
 
     def _build_metrics(self):
         self.metric_names = ['disc', 'disc_cls', 'disc_adv',
@@ -87,8 +88,8 @@ class StarCartoonTrainer(BaseTrainer):
         self.style_enc.train()
         self.train_metrics.reset()
 
-        for batch_idx, (src_imgs, src_labels, tar_imgs, tar_labels) in enumerate(self.train_dataloader):
-            src_imgs, src_labels, tar_imgs, tar_labels = src_imgs.to(self.device), src_labels.to(self.device), tar_imgs.to(self.device), tar_labels.to(self.device)
+        for batch_idx, (src_imgs, tar_imgs, tar_labels) in enumerate(self.train_dataloader):
+            src_imgs, tar_imgs, tar_labels = src_imgs.to(self.device), tar_imgs.to(self.device), tar_labels.to(self.device)
             self.gen_optim.zero_grad()
             self.disc_optim.zero_grad()
             self.map_net.zero_grad()
@@ -96,8 +97,11 @@ class StarCartoonTrainer(BaseTrainer):
             batch_size = src_imgs.size(0)
 
             # generation
-            tar_z = torch.randn((batch_size, self.config.latent_size)).to(self.device)
-            tar_s = self.map_net(tar_z, tar_labels)
+            if batch_idx % 2 == 0:
+                tar_z = torch.randn((batch_size, self.config.latent_size)).to(self.device)
+                tar_s = self.map_net(tar_z, tar_labels)
+            else:
+                tar_s = self.style_enc(tar_imgs, tar_labels)
             fake_tar_imgs = self.gen(src_imgs, tar_s)
 
             # train G
@@ -119,25 +123,23 @@ class StarCartoonTrainer(BaseTrainer):
             fake_tar_imgs2 = fake_tar_imgs2.detach()
             gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
-            # cycle consistency loss
-            src_s = self.style_enc(src_imgs, src_labels)
-            rec_src_imgs = self.gen(fake_tar_imgs, src_s)
-            gen_cyc_loss = torch.mean(torch.abs(rec_src_imgs - src_imgs))
+            # content loss
+            gen_rec_loss = self.rec_loss(fake_tar_imgs, src_imgs)
 
             # total loss
-            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_cyc_loss + self.config.lambda_sty * gen_sty_loss - self.config.lambda_ds * gen_ds_loss
+            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss + self.config.lambda_sty * gen_sty_loss - self.config.lambda_ds * gen_ds_loss
             gen_loss.backward()
             self.gen_optim.step()
 
             # train D
             self.set_requires_grad(self.disc, requires_grad=True)
             disc_real_logits1, disc_real_logits2 = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
-            disc_fake_logits1, _ = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
-            _, disc_tar_logits2 = self.disc(DiffAugment(src_imgs, policy=self.config.data_aug_policy))
+            disc_fake_logits1, disc_fake_logits2 = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
 
             # compute loss
+            fake_tar_labels = torch.LongTensor(np.random.randint(0, 2, tar_imgs.size(0))).to(self.device)
             disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1, real=False)
-            disc_cls_loss = self.cls_loss(disc_tar_logits2, src_labels) + self.cls_loss(disc_real_logits2, tar_labels)
+            disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels) + self.cls_loss(disc_real_logits2, fake_tar_labels)
             disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
             disc_loss.backward()
             self.disc_optim.step()
@@ -152,7 +154,7 @@ class StarCartoonTrainer(BaseTrainer):
             self.train_metrics.update('gen_cls', gen_cls_loss.item())
             self.train_metrics.update('gen_sty', gen_sty_loss.item())
             self.train_metrics.update('gen_ds', gen_ds_loss.item())
-            self.train_metrics.update('gen_rec', gen_cyc_loss.item())
+            self.train_metrics.update('gen_rec', gen_rec_loss.item())
 
 
             if batch_idx % self.log_step == 0:
@@ -187,9 +189,8 @@ class StarCartoonTrainer(BaseTrainer):
 
         self.valid_metrics.reset()
         with torch.no_grad():
-            for batch_idx, (src_imgs, src_labels, tar_imgs, tar_labels) in enumerate(self.valid_dataloader):
-                src_imgs, src_labels, tar_imgs, tar_labels = src_imgs.to(
-                    self.device), src_labels.to(self.device), tar_imgs.to(self.device), tar_labels.to(self.device)
+            for batch_idx, (src_imgs, tar_imgs, tar_labels) in enumerate(self.valid_dataloader):
+                src_imgs, tar_imgs, tar_labels = src_imgs.to(self.device), tar_imgs.to(self.device), tar_labels.to(self.device)
                 batch_size = src_imgs.size(0)
 
                 # generation
@@ -214,13 +215,11 @@ class StarCartoonTrainer(BaseTrainer):
                 fake_tar_imgs2 = fake_tar_imgs2.detach()
                 gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
-                # cycle consistency loss
-                src_s = self.style_enc(src_imgs, src_labels)
-                rec_src_imgs = self.gen(fake_tar_imgs, src_s)
-                gen_cyc_loss = torch.mean(torch.abs(rec_src_imgs - src_imgs))
+                # content loss
+                gen_rec_loss = self.rec_loss(fake_tar_imgs, src_imgs)
 
                 # total loss
-                gen_loss = self.config.lambda_adv *  gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_cyc_loss + self.config.lambda_sty * gen_sty_loss - self.config.lambda_ds * gen_ds_loss
+                gen_loss = self.config.lambda_adv *  gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss + self.config.lambda_sty * gen_sty_loss - self.config.lambda_ds * gen_ds_loss
 
                 # train D
                 self.set_requires_grad(self.disc, requires_grad=True)
@@ -231,8 +230,7 @@ class StarCartoonTrainer(BaseTrainer):
                 # compute loss
                 disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1,
                                                                                             real=False)
-                disc_cls_loss = self.cls_loss(disc_tar_logits2, src_labels) + self.cls_loss(disc_real_logits2,
-                                                                                            tar_labels)
+                disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels)
                 disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
 
                 disc_losses.append(disc_loss.item())
@@ -243,7 +241,7 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_cls_losses.append(gen_cls_loss.item())
                 gen_sty_losses.append(gen_sty_loss.item())
                 gen_ds_losses.append(gen_ds_loss.item())
-                gen_rec_losses.append(gen_cyc_loss.item())
+                gen_rec_losses.append(gen_rec_loss.item())
 
             # log losses
             self.writer.set_step(epoch)

@@ -4,7 +4,7 @@ import argparse
 import torch
 from easydict import EasyDict as edict
 from tqdm import tqdm
-from data_loaders import CartoonDefaultDataset
+from data_loaders import CartoonDefaultDataLoader
 from models import Generator
 from utils.misc import read_json
 import numpy as np
@@ -26,6 +26,7 @@ def main():
 
     # find config.json in checkpoint folder
     checkpoint_path = os.path.join(working_dir, config.checkpoint_path)
+    checkpoint_epoch = checkpoint_path.split('/')[-1].split('.')[0]
     checkpoint_dir = os.path.dirname(checkpoint_path)
     exp_dir = os.path.dirname(checkpoint_dir)
     result_dir = os.path.join(exp_dir, 'results')
@@ -39,12 +40,12 @@ def main():
     # load config
     config = read_json(os.path.join(exp_dir, 'config.json'))
     config = edict(config)
-    image_dir = os.path.join(result_dir, '{}2{}_{}'.format(config.src_style, config.tar_style, image_size))
+    image_dir = os.path.join(result_dir, '{}2{}_{}_{}'.format(config.src_style, config.tar_style, image_size, checkpoint_epoch))
     if not os.path.exists(image_dir):
         os.mkdir(image_dir)
 
     # build dataloader
-    data_loader = CartoonTestDataLoader(
+    data_loader = CartoonDefaultDataLoader(
         data_dir=config.data_dir,
         style=config.src_style,
         image_size=image_size,
@@ -89,7 +90,7 @@ def main():
     del data_loader
 
 
-    result_file = open('{}/{}2_{}_result_{}.txt'.format(result_dir, config.src_style, config.tar_style, image_size), "w")
+    result_file = open('{}/{}2_{}_result_{}_{}.txt'.format(result_dir, config.src_style, config.tar_style, image_size, checkpoint_epoch), "w")
 
     # calculate fid score
     results = calculate_fid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
