@@ -97,14 +97,14 @@ def main():
     result_file = open('{}/{}2_{}_result_{}_{}.txt'.format(result_dir, config.src_style, config.tar_style, image_size, checkpoint_epoch), "w")
 
     # calculate fid score
-    results = calculate_fid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
+    results = calculate_fid_given_paths(['{}/{}_test.txt'.format(config.data_dir, config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
     for p, m, s in results:
         line = 'FID (%s): %.2f (%.3f)\n' % (p, m, s)
         result_file.write(line)
         print(line)
 
     # calculate kid score
-    results = calculate_kid_given_paths(['/home/zhaobin/cartoon/{}_test.txt'.format(config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
+    results = calculate_kid_given_paths(['{}/{}_test.txt'.format(config.data_dir, config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
     for p, m, s in results:
         line = 'KID (%s): %.2f (%.3f)\n' % (p, m, s)
         result_file.write(line)
