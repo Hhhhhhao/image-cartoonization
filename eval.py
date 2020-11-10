@@ -72,7 +72,7 @@ def main():
             tar_imgs = model(src_imgs)
 
             if config.exp_name == 'whitebox':
-                tar_imgs(src_imgs, tar_imgs, r=1)
+                tar_imgs = guided_filter(src_imgs, tar_imgs, r=1)
 
             # save images
             tar_imgs = tar_imgs.cpu().numpy().transpose(0, 2, 3, 1)
