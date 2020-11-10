@@ -214,6 +214,7 @@ class WhiteboxTrainer(BaseTrainer):
 
                 # ============ Generation ============ #
                 fake_tar_imgs = self.gen(src_imgs)
+                fake_tar_imgs = guided_filter(src_imgs, fake_tar_imgs, r=1)
 
                 # ============ train G ============ #
                 tv_loss = self.tv_loss(fake_tar_imgs)

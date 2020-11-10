@@ -11,6 +11,7 @@ import numpy as np
 import cv2
 from fid_score import calculate_fid_given_paths
 from kid_score import calculate_kid_given_paths
+from utils.wb_utils import guided_filter
 
 def get_config(manual=None):
     parser = argparse.ArgumentParser('Image Cartoon')
@@ -69,6 +70,9 @@ def main():
         for batch_idx, src_imgs in tqdm(enumerate(data_loader), total=len(data_loader)):
             src_imgs = src_imgs.to(device)
             tar_imgs = model(src_imgs)
+
+            if config.exp_name == 'whitebox':
+                tar_imgs(src_imgs, tar_imgs, r=1)
 
             # save images
             tar_imgs = tar_imgs.cpu().numpy().transpose(0, 2, 3, 1)
