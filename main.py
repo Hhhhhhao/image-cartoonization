@@ -7,7 +7,7 @@ def init_config():
 
     # basic options
     parser.add_argument('--exp-name', default='stargan', help='experiment name',
-                        choices=['cyclegan', 'cartoongan', 'whitebox', 'stargan'])
+                        choices=['cyclegan', 'cartoongan', 'whitebox', 'stargan', 'classifier'])
     parser.add_argument('--data-dir', default='/home/zhaobin/cartoon/', help='data dir')
     parser.add_argument('--n-gpu', default=1, type=int, help='number of gpus to use')
     parser.add_argument('--tensorboard', default=False, action='store_true', help='use tensorboard to log results')
@@ -48,6 +48,10 @@ def init_config():
     parser.add_argument('--lambda-sty', type=float, default=1, help='style loss weight')
     parser.add_argument('--lambda-ds', type=float, default=1, help='diversity loss weight')
     parser.add_argument('--lambda-cls', type=float, default=1, help='classification loss weight')
+
+    # classifier
+    parser.add_argument('--num-feature', type=int, default=1024, help='num of features')
+    parser.add_argument('--num-class', type=int, default=4, help='num of classes')
 
     return parser.parse_args()
 
