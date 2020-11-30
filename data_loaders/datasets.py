@@ -127,7 +127,7 @@ class StarCartoonDataset(Dataset):
                 path = line.strip()
                 src_data.append(path)
 
-        styles = ['gongqijun', 'xinhaicheng']
+        styles = ['gongqijun', 'xinhaicheng', 'disney', 'tangqian']
         tar_data = {}
         for i, style in enumerate(styles):
             tar_data[i] = []
@@ -148,7 +148,7 @@ class StarCartoonDataset(Dataset):
 
     def __getitem__(self, index):
         # sample a target
-        tar_label = random.randint(0, 1)
+        tar_label = random.randint(0, 3)
         src_path = self.src_data[index]
         tar_path = self.tar_data[tar_label][index]
         src_img = Image.open(os.path.join(self.data_dir, src_path))

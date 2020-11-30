@@ -56,22 +56,21 @@ class StarCartoonTrainer(BaseTrainer):
 
     def _build_model(self):
         gen = StarGenerator(self.config.image_size, self.config.down_size, self.config.num_res, self.config.skip_conn, self.config.style_size)
-        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=2)
-        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=2)
-        # style_enc = StyleEncoder(image_size=self.config.image_size, style_dim=self.config.style_size, num_domains=2)
-        return gen, disc, map_net # style_enc
+        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=4)
+        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=4)
+        return gen, disc, map_net
 
     def _build_optimizer(self, gen, disc, map_net):
         gen_optim = torch.optim.AdamW(gen.parameters(),  lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
         disc_optim = torch.optim.AdamW(disc.parameters(), lr=self.config.d_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
         map_net_optim = torch.optim.AdamW(map_net.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
         # style_enc_optim = torch.optim.AdamW(map_net.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        return gen_optim, disc_optim, map_net_optim #, style_enc_optim
+        return gen_optim, disc_optim, map_net_optim
 
     def _build_criterion(self):
         self.adv_loss = eval('{}Loss'.format(self.config.adv_criterion))()
         self.cls_loss = torch.nn.CrossEntropyLoss()
-        self.rec_loss = VGGPerceptualLoss().to(self.device)
+        self.rec_loss = PatchNCELoss(self.config.nce_t).to(self.device)
 
     def _build_metrics(self):
         self.metric_names = ['disc', 'disc_cls', 'disc_adv',
@@ -114,7 +113,9 @@ class StarCartoonTrainer(BaseTrainer):
             gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
             # content loss
-            gen_rec_loss = self.rec_loss(fake_tar_imgs, src_imgs)
+            feat_q, _ = self.gen.module.forward_encoder(src_imgs)
+            feat_k, _ = self.gen.module.forward_encoder(fake_tar_imgs)
+            gen_rec_loss = self.rec_loss(feat_q, feat_k)
 
             # total loss
             gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
@@ -144,7 +145,6 @@ class StarCartoonTrainer(BaseTrainer):
             self.train_metrics.update('gen_cls', gen_cls_loss.item())
             self.train_metrics.update('gen_ds', gen_ds_loss.item())
             self.train_metrics.update('gen_rec', gen_rec_loss.item())
-
 
             if batch_idx % self.log_step == 0:
                 self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(

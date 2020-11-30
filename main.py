@@ -2,6 +2,7 @@ import argparse
 from utils import process_config
 from trainers import build_trainer
 
+
 def init_config():
     parser = argparse.ArgumentParser('Image Cartoon')
 
@@ -19,7 +20,7 @@ def init_config():
     parser.add_argument('--src-style', default='real', help='source images style', choices=['real'])
     parser.add_argument('--tar-style', default='gongqijun', help='target images style', choices=['gongqijun', 'tangqian', 'xinhaicheng', 'disney'])
     parser.add_argument('--epochs', default=30, type=int, help='number of epochs for training the model')
-    parser.add_argument('--batch-size', default=4, type=int, help='batch size')
+    parser.add_argument('--batch-size', default=2, type=int, help='batch size')
     parser.add_argument('--g-lr', default=1e-4, type=float, help='generator learning rate')
     parser.add_argument('--d-lr', default=2e-4, type=float, help='discriminator learning rate')
     parser.add_argument('--weight-decay', default=1e-4, type=float, help='weight decay for optimizers')
@@ -48,6 +49,7 @@ def init_config():
     parser.add_argument('--lambda-sty', type=float, default=1, help='style loss weight')
     parser.add_argument('--lambda-ds', type=float, default=1, help='diversity loss weight')
     parser.add_argument('--lambda-cls', type=float, default=1, help='classification loss weight')
+    parser.add_argument('--nce-t', type=float, default=0.07)
 
     return parser.parse_args()
 
