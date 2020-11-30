@@ -118,10 +118,11 @@ class ClassifierDataLoader(BaseDataLoader):
     def __init__(self, data_dir, image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
 
         # data augmentation
-        transform = build_train_transform(style='fake', image_size=image_size)
+        src_transform = build_train_transform('real', image_size)
+        tar_transform = build_train_transform('cartoon', image_size)
 
         # create dataset
-        self.dataset =ImageFolder(data_dir, transform)
+        self.dataset = StarCartoonDataset(data_dir, src_transform, tar_transform)
 
         super(ClassifierDataLoader, self).__init__(
             dataset=self.dataset,

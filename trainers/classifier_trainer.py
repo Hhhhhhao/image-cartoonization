@@ -6,14 +6,15 @@ from models import ResNet
 from losses import *
 from data_loaders import ClassifierDataLoader
 from utils import MetricTracker
+import torch.nn as nn
 
-class ExpnameTrainer(BaseTrainer):
+class ClassifierTrainer(BaseTrainer):
     def __init__(self, config):
-        super(ExpnameTrainer, self).__init__(config)
+        super(ClassifierTrainer, self).__init__(config)
 
         self.logger.info("Creating data loaders...")
         self.train_dataloader, self.valid_dataloader = self._build_dataloader()
-        self.log_step = int(np.sqrt(self.train_dataloader.batch_size))
+        self.log_step = int(np.sqrt(self.train_dataloader.batch_size))*20
 
         self.logger.info("Creating model architecture...")
         resnet = self._build_model()
@@ -82,7 +83,7 @@ class ExpnameTrainer(BaseTrainer):
         self.resnet.train()
         self.train_metrics.reset()
 
-        for batch_idx, (img, label) in enumerate(self.train_dataloader):
+        for batch_idx, (src, img, label) in enumerate(self.train_dataloader):
             img, label = img.to(self.device), label.to(self.device)
             self.optim.zero_grad()
 
@@ -105,16 +106,17 @@ class ExpnameTrainer(BaseTrainer):
             self.train_metrics.update('resnet_acc', torch.div(torch.sum(acc), label.size(0)))
 
             if batch_idx % self.log_step == 0:
-                self.logger.info('Train Epoch: {:d} {:d} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
+                self.logger.info('Train Epoch: {:d} {:s} Loss: {:.4f} Acc: {:.2f}'.format(
                     epoch,
                     self._progress(batch_idx),
-                    loss.item()))
+                    loss.item(),
+                    torch.div(torch.sum(acc), label.size(0))))
 
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
         log.update(**{'val_'+k : v for k, v in val_log.items()})
         # shuffle data loader
-        self.train_dataloader.shuffle()
+        self.train_dataloader.shuffle_dataset()
         return log
 
     def _valid_epoch(self, epoch):
@@ -130,20 +132,20 @@ class ExpnameTrainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
 
-            for batch_idx, (img, label) in enumerate(self.valid_dataloader):
+            for batch_idx, (src, img, label) in enumerate(self.valid_dataloader):
                 img, label = img.to(self.device), label.to(self.device)
 
                 # TODO similar to train but not optimizer.step()
                 # raise NotImplementedError
                 pred = self.resnet(img)
                 loss = self.adv_criterion(pred, label)
-                losses.append(loss)
+                losses.append(loss.item())
 
                 correct = pred.argmax(1).eq(label)
                 correct = correct.view(-1).float()
                 correct = correct.sum(0, keepdim=True)
                 acc = correct.mul_(100.0)
-                accs.append(torch.div(torch.sum(acc), label.size(0)))
+                accs.append(torch.div(torch.sum(acc).item(), label.size(0)))
 
             # log losses
             self.writer.set_step(epoch)
