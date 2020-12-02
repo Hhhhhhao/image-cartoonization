@@ -152,7 +152,6 @@ class StarCartoonTrainer(BaseTrainer):
                     self._progress(batch_idx),
                     disc_loss.item(),
                     gen_loss.item()))
-                break
 
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
