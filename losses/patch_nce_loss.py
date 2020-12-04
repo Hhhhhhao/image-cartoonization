@@ -20,19 +20,7 @@ class PatchNCELoss(nn.Module):
         l_pos = l_pos.view(batchSize, 1)
 
         # neg logit
-
-        # Should the negatives from the other samples of a minibatch be utilized?
-        # In CUT and FastCUT, we found that it's best to only include negatives
-        # from the same image. Therefore, we set
-        # --nce_includes_all_negatives_from_minibatch as False
-        # However, for single-image translation, the minibatch consists of
-        # crops from the "same" high-resolution image.
-        # Therefore, we will include the negatives from the entire minibatch.
-        if self.opt.nce_includes_all_negatives_from_minibatch:
-            # reshape features as if they are all negatives of minibatch of size 1.
-            batch_dim_for_bmm = 1
-        else:
-            batch_dim_for_bmm = batchSize
+        batch_dim_for_bmm = 1
 
         # reshape features to batch size
         feat_q = feat_q.view(batch_dim_for_bmm, -1, dim)
