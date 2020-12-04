@@ -208,6 +208,7 @@ class StarCartoonTrainer(BaseTrainer):
                 feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
                 feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
                 gen_rec_loss = 0.0
+                for f_q, f_k in zip(feat_q_pool, feat_k_pool):
                     gen_rec_loss += self.rec_loss(f_q, f_k).mean()
 
                 # total loss
