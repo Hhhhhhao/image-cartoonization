@@ -192,7 +192,7 @@ class StarGenerator(nn.Module):
 
     def forward(self, x, s):
 
-        out, down = self.forward_encoder(x)
+        out, _, down = self.forward_encoder(x)
 
         for i, up_layer in enumerate(self.up_layers):
             if self.skip_conn:
@@ -207,15 +207,18 @@ class StarGenerator(nn.Module):
         out = self.conv_in(x)
 
         feat_list = []
+        down = []
         for i, down_layer in enumerate(self.down_layers):
             out = down_layer(out)
+            down.append(out)
             if i % 2 == 0:
                 feat_list.append(out)
+        down = down[::-1]
 
         for res_layer in self.res_layers:
             out = res_layer(out)
             feat_list.append(out)
-        return feat_list
+        return out, feat_list, down
 
 
 
