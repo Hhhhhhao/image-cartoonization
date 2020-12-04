@@ -175,7 +175,7 @@ class StarGenerator(nn.Module):
         res_layers = []
         for i in range(self.num_res):
             res_layers.append(ResConv(feat_dim, feat_dim, 3))
-        self.res_layers = nn.Sequential(*res_layers)
+        self.res_layers = nn.ModuleList(res_layers)
 
         # upsample layers
         self.up_layers = nn.ModuleList()
@@ -206,14 +206,16 @@ class StarGenerator(nn.Module):
     def forward_encoder(self, x):
         out = self.conv_in(x)
 
-        down = []
-        for down_layer in self.down_layers:
+        feat_list = []
+        for i, down_layer in enumerate(self.down_layers):
             out = down_layer(out)
-            down.append(out)
-        down = down[::-1]
+            if i % 2 == 0:
+                feat_list.append(out)
 
-        out = self.res_layers(out)
-        return out, down
+        for res_layer in self.res_layers:
+            out = res_layer(out)
+            feat_list.append(out)
+        return feat_list
 
 
 
