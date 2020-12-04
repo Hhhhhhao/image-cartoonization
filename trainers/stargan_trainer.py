@@ -120,7 +120,7 @@ class StarCartoonTrainer(BaseTrainer):
             gen_rec_loss = 0.0
             for f_q, f_k in zip(feat_q_pool, feat_k_pool):
                 gen_rec_loss += self.rec_loss(f_q, f_k).mean()
-            
+
             # total loss
             gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
             gen_loss.backward()
@@ -203,9 +203,12 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
                 # content loss
-                feat_q, _ = self.gen.forward_encoder(src_imgs)
-                feat_k, _ = self.gen.forward_encoder(fake_tar_imgs)
-                gen_rec_loss = self.rec_loss(feat_q, feat_k)
+                feat_q = self.gen.forward_encoder(src_imgs)
+                feat_k = self.gen.forward_encoder(fake_tar_imgs)
+                feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+                feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+                gen_rec_loss = 0.0
+                    gen_rec_loss += self.rec_loss(f_q, f_k).mean()
 
                 # total loss
                 gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
