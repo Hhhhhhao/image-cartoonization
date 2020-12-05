@@ -266,9 +266,10 @@ class StarCartoonTrainer(BaseTrainer):
                 self.device_ids) <= 1 else self.disc.module.state_dict(),
             'map_state_dict': self.map_net.state_dict() if len(
                 self.device_ids) <= 1 else self.map_net.module.state_dict(),
+            'samp_state_dict': self.samp_net.state_dict() if len(
+                self.device_ids) <= 1 else self.samp_net.module.state_dict(),
             'gen_optim': self.gen_optim.state_dict(),
             'disc_optim': self.disc_optim.state_dict(),
-            'map_optim': self.map_net_optim.state_dict()
         }
         filename = str(self.config.checkpoint_dir + 'current.pth')
         torch.save(state, filename)
