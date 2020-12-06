@@ -217,8 +217,8 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
                 # content loss
-                _, feat_q, _ = self.gen.forward_encoder(src_imgs)
-                _, feat_k, _ = self.gen.forward_encoder(fake_tar_imgs)
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+                _, feat_k, _ = self.gen.forward_encoder(src_imgs)
                 feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
                 feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
                 gen_rec_loss = 0.0
