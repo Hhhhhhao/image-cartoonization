@@ -211,8 +211,7 @@ class StarGenerator(nn.Module):
         for i, down_layer in enumerate(self.down_layers):
             out = down_layer(out)
             down.append(out)
-            if i % 2 == 0:
-                feat_list.append(out)
+            feat_list.append(out)
         down = down[::-1]
 
         for res_layer in self.res_layers:

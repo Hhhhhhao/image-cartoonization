@@ -84,6 +84,7 @@ class StarCartoonTrainer(BaseTrainer):
         self.gen.train()
         self.disc.train()
         self.map_net.train()
+        self.samp_net.train()
         self.train_metrics.reset()
 
         for batch_idx, (src_imgs, tar_imgs, tar_labels) in enumerate(self.train_dataloader):
@@ -96,6 +97,19 @@ class StarCartoonTrainer(BaseTrainer):
             tar_z = torch.randn((batch_size, self.config.latent_size)).to(self.device)
             tar_s = self.map_net(tar_z, tar_labels)
             fake_tar_imgs = self.gen(src_imgs, tar_s)
+
+            # train D
+            self.set_requires_grad(self.disc, requires_grad=True)
+            disc_real_logits1, disc_real_logits2 = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
+            disc_fake_logits1, disc_fake_logits2 = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
+
+            # compute loss
+            fake_tar_labels = torch.LongTensor(np.random.randint(0, 4, tar_imgs.size(0))).to(self.device)
+            disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1, real=False)
+            disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels) + self.cls_loss(disc_real_logits2, fake_tar_labels)
+            disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
+            disc_loss.backward()
+            self.disc_optim.step()
 
             # train G
             self.set_requires_grad(self.disc, requires_grad=False)
@@ -115,6 +129,8 @@ class StarCartoonTrainer(BaseTrainer):
             # content loss
             _, feat_q, _ = self.gen.forward_encoder(src_imgs)
             _, feat_k, _ = self.gen.forward_encoder(fake_tar_imgs)
+            feat_q = feat_q.view(batch_size, feat_q.size(1), -1)
+            feat_k = feat_k.view(batch_size, feat_k.size(1), -1)
             feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
             feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
             gen_rec_loss = 0.0
@@ -125,19 +141,6 @@ class StarCartoonTrainer(BaseTrainer):
             gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
             gen_loss.backward()
             self.gen_optim.step()
-
-            # train D
-            self.set_requires_grad(self.disc, requires_grad=True)
-            disc_real_logits1, disc_real_logits2 = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
-            disc_fake_logits1, disc_fake_logits2 = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
-
-            # compute loss
-            fake_tar_labels = torch.LongTensor(np.random.randint(0, 4, tar_imgs.size(0))).to(self.device)
-            disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1, real=False)
-            disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels) + self.cls_loss(disc_real_logits2, fake_tar_labels)
-            disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
-            disc_loss.backward()
-            self.disc_optim.step()
 
             # ============ log ============ #
             self.writer.set_step((epoch - 1) * len(self.train_dataloader) + batch_idx)
@@ -168,6 +171,7 @@ class StarCartoonTrainer(BaseTrainer):
         self.gen.eval()
         self.disc.eval()
         self.map_net.eval()
+        self.samp_net.eval()
 
         disc_losses = []
         disc_adv_losses = []
@@ -205,6 +209,8 @@ class StarCartoonTrainer(BaseTrainer):
                 # content loss
                 _, feat_q, _ = self.gen.forward_encoder(src_imgs)
                 _, feat_k, _ = self.gen.forward_encoder(fake_tar_imgs)
+                feat_q = feat_q.view(batch_size, feat_q.size(1), -1)
+                feat_k = feat_k.view(batch_size, feat_k.size(1), -1)
                 feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
                 feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
                 gen_rec_loss = 0.0
