@@ -218,6 +218,8 @@ class PatchSampleF(nn.Module):
 
             if num_patches == 0:
                 x_sample = x_sample.permute(0, 2, 1).reshape([B, x_sample.shape[-1], H, W])
+
+            print(x_sample.shape)
             return_feats.append(x_sample)
         return return_feats, return_ids
 
