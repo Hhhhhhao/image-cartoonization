@@ -127,8 +127,8 @@ class StarCartoonTrainer(BaseTrainer):
             gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
             # content loss
-            _, feat_q, _ = self.gen.forward_encoder(src_imgs)
-            _, feat_k, _ = self.gen.forward_encoder(fake_tar_imgs)
+            _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+            _, feat_k, _ = self.gen.forward_encoder(src_imgs)
             feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
             feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
             gen_rec_loss = 0.0
@@ -136,10 +136,19 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_rec_loss += self.rec_loss(f_q, f_k).mean()
 
             # identity loss
-
+            tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
+            tar_s3 = self.map_net(tar_z3, tar_labels)
+            fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
+            _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+            _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+            feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+            feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+            gen_idt_loss = 0.0
+            for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                gen_idt_loss += self.rec_loss(f_q, f_k).mean()
 
             # total loss
-            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
+            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * (gen_rec_loss + gen_idt_loss) - self.config.lambda_ds * gen_ds_loss
             gen_loss.backward()
             self.gen_optim.step()
 
@@ -216,8 +225,20 @@ class StarCartoonTrainer(BaseTrainer):
                 for f_q, f_k in zip(feat_q_pool, feat_k_pool):
                     gen_rec_loss += self.rec_loss(f_q, f_k).mean()
 
+                # identity loss
+                tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
+                tar_s3 = self.map_net(tar_z3, tar_labels)
+                fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+                _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+                feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+                feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+                gen_idt_loss = 0.0
+                for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                    gen_idt_loss += self.rec_loss(f_q, f_k).mean()
+
                 # total loss
-                gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
+                gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * (gen_rec_loss + gen_idt_loss) - self.config.lambda_ds * gen_ds_loss
 
                 # train D
                 self.set_requires_grad(self.disc, requires_grad=True)
