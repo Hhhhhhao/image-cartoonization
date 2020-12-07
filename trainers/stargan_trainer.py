@@ -127,8 +127,12 @@ class StarCartoonTrainer(BaseTrainer):
             gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
             # content loss
-            _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
-            _, feat_k, _ = self.gen.forward_encoder(src_imgs)
+            if len(self.device_ids) > 1:
+                _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs)
+                _, feat_k, _ = self.gen.module.forward_encoder(src_imgs)
+            else:
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+                _, feat_k, _ = self.gen.forward_encoder(src_imgs)
             feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
             feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
             gen_rec_loss = 0.0
@@ -139,8 +143,12 @@ class StarCartoonTrainer(BaseTrainer):
             tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
             tar_s3 = self.map_net(tar_z3, tar_labels)
             fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
-            _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
-            _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+            if len(self.device_ids) > 1:
+                _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs2)
+                _, feat_k, _ = self.gen.module.forward_encoder(tar_imgs)
+            else:
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+                _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
             feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
             feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
             gen_idt_loss = 0.0
@@ -217,8 +225,12 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
                 # content loss
-                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
-                _, feat_k, _ = self.gen.forward_encoder(src_imgs)
+                if len(self.device_ids) > 1:
+                    _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs)
+                    _, feat_k, _ = self.gen.module.forward_encoder(src_imgs)
+                else:
+                    _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+                    _, feat_k, _ = self.gen.forward_encoder(src_imgs)
                 feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
                 feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
                 gen_rec_loss = 0.0
@@ -229,8 +241,12 @@ class StarCartoonTrainer(BaseTrainer):
                 tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
                 tar_s3 = self.map_net(tar_z3, tar_labels)
                 fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
-                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
-                _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+                if len(self.device_ids) > 1:
+                    _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs2)
+                    _, feat_k, _ = self.gen.module.forward_encoder(tar_imgs)
+                else:
+                    _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+                    _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
                 feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
                 feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
                 gen_idt_loss = 0.0
