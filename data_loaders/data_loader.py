@@ -2,6 +2,7 @@ from torchvision import transforms
 from base import BaseDataLoader
 from torch.utils.data import DataLoader
 from .datasets import CartoonDataset, CartoonGANDataset, CartoonDefaultDataset, StarCartoonDataset
+from torchvision.datasets import ImageFolder
 
 
 def build_train_transform(style='real', image_size=256):
@@ -102,6 +103,28 @@ class StarCartoonDataLoader(BaseDataLoader):
         # create dataset
         self.dataset = StarCartoonDataset(data_dir, src_transform, tar_transform)
         super(StarCartoonDataLoader, self).__init__(
+            dataset=self.dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            validation_split=validation_split,
+            num_workers=num_workers,
+            drop_last=True)
+
+    def shuffle_dataset(self):
+        self.dataset._shuffle_data()
+
+
+class ClassifierDataLoader(BaseDataLoader):
+    def __init__(self, data_dir, image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
+
+        # data augmentation
+        src_transform = build_train_transform('real', image_size)
+        tar_transform = build_train_transform('cartoon', image_size)
+
+        # create dataset
+        self.dataset = StarCartoonDataset(data_dir, src_transform, tar_transform)
+
+        super(ClassifierDataLoader, self).__init__(
             dataset=self.dataset,
             batch_size=batch_size,
             shuffle=True,
