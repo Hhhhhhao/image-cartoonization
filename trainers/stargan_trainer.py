@@ -2,7 +2,7 @@ import torch
 import torchvision
 import numpy as np
 from base import BaseTrainer
-from models import StarGenerator, StarDiscriminator, MappingNetwork, StyleEncoder
+from models import StarGenerator, StarDiscriminator, MappingNetwork, StyleEncoder, PatchSampleF
 from losses import *
 from data_loaders import StarCartoonDataLoader, DiffAugment
 from utils import MetricTracker
@@ -17,7 +17,7 @@ class StarCartoonTrainer(BaseTrainer):
         self.log_step = int(np.sqrt(self.train_dataloader.batch_size))
 
         self.logger.info("Creating model architecture...")
-        gen, disc, map_net = self._build_model()
+        gen, disc, map_net, samp_net = self._build_model()
 
         # resume
         if self.config.resume is not None:
@@ -27,15 +27,17 @@ class StarCartoonTrainer(BaseTrainer):
         self.gen = gen.to(self.device)
         self.disc = disc.to(self.device)
         self.map_net = map_net.to(self.device)
+        self.samp_net = samp_net.to(self.device)
 
         if len(self.device_ids) > 1:
             self.gen = torch.nn.DataParallel(self.gen, device_ids=self.device_ids)
             self.disc = torch.nn.DataParallel(self.disc, device_ids=self.device_ids)
             self.map_net = torch.nn.DataParallel(self.map_net, device_ids=self.device_ids)
+            self.samp_net = torch.nn.DataParallel(self.samp_net, device_ids=self.device_ids)
 
         # optimizer
         self.logger.info("Creating optimizers...")
-        self.gen_optim, self.disc_optim, self.map_net_optim = self._build_optimizer(self.gen, self.disc, self.map_net)
+        self.gen_optim, self.disc_optim = self._build_optimizer(self.gen, self.disc, self.map_net, self.samp_net)
 
         # build loss
         self.logger.info("Creating losses...")
@@ -56,22 +58,20 @@ class StarCartoonTrainer(BaseTrainer):
 
     def _build_model(self):
         gen = StarGenerator(self.config.image_size, self.config.down_size, self.config.num_res, self.config.skip_conn, self.config.style_size)
-        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=2)
-        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=2)
-        # style_enc = StyleEncoder(image_size=self.config.image_size, style_dim=self.config.style_size, num_domains=2)
-        return gen, disc, map_net # style_enc
+        disc = StarDiscriminator(self.config.image_size, self.config.down_size, num_domains=4)
+        map_net = MappingNetwork(latent_dim=16, style_dim=self.config.style_size, num_domains=4)
+        samp_net = PatchSampleF(use_mlp=True, gpu_ids=self.device_ids)
+        return gen, disc, map_net, samp_net
 
-    def _build_optimizer(self, gen, disc, map_net):
-        gen_optim = torch.optim.AdamW(gen.parameters(),  lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
+    def _build_optimizer(self, gen, disc, map_net, samp_net):
+        gen_optim = torch.optim.AdamW(list(gen.parameters()) + list(map_net.parameters()) + list(samp_net.parameters()),  lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
         disc_optim = torch.optim.AdamW(disc.parameters(), lr=self.config.d_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        map_net_optim = torch.optim.AdamW(map_net.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        # style_enc_optim = torch.optim.AdamW(map_net.parameters(), lr=self.config.g_lr, weight_decay=self.config.weight_decay, betas=(0.5, 0.999))
-        return gen_optim, disc_optim, map_net_optim #, style_enc_optim
+        return gen_optim, disc_optim
 
     def _build_criterion(self):
         self.adv_loss = eval('{}Loss'.format(self.config.adv_criterion))()
         self.cls_loss = torch.nn.CrossEntropyLoss()
-        self.rec_loss = VGGPerceptualLoss().to(self.device)
+        self.rec_loss = PatchNCELoss(self.config.nce_t).to(self.device)
 
     def _build_metrics(self):
         self.metric_names = ['disc', 'disc_cls', 'disc_adv',
@@ -84,19 +84,32 @@ class StarCartoonTrainer(BaseTrainer):
         self.gen.train()
         self.disc.train()
         self.map_net.train()
+        self.samp_net.train()
         self.train_metrics.reset()
 
         for batch_idx, (src_imgs, tar_imgs, tar_labels) in enumerate(self.train_dataloader):
             src_imgs, tar_imgs, tar_labels = src_imgs.to(self.device), tar_imgs.to(self.device), tar_labels.to(self.device)
             self.gen_optim.zero_grad()
             self.disc_optim.zero_grad()
-            self.map_net.zero_grad()
             batch_size = src_imgs.size(0)
 
             # generation
             tar_z = torch.randn((batch_size, self.config.latent_size)).to(self.device)
             tar_s = self.map_net(tar_z, tar_labels)
             fake_tar_imgs = self.gen(src_imgs, tar_s)
+
+            # train D
+            self.set_requires_grad(self.disc, requires_grad=True)
+            disc_real_logits1, disc_real_logits2 = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
+            disc_fake_logits1, disc_fake_logits2 = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
+
+            # compute loss
+            fake_tar_labels = torch.LongTensor(np.random.randint(0, 4, tar_imgs.size(0))).to(self.device)
+            disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1, real=False)
+            disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels) + self.cls_loss(disc_real_logits2, fake_tar_labels)
+            disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
+            disc_loss.backward()
+            self.disc_optim.step()
 
             # train G
             self.set_requires_grad(self.disc, requires_grad=False)
@@ -114,25 +127,38 @@ class StarCartoonTrainer(BaseTrainer):
             gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
             # content loss
-            gen_rec_loss = self.rec_loss(fake_tar_imgs, src_imgs)
+            if len(self.device_ids) > 1:
+                _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs)
+                _, feat_k, _ = self.gen.module.forward_encoder(src_imgs)
+            else:
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+                _, feat_k, _ = self.gen.forward_encoder(src_imgs)
+            feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+            feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+            gen_rec_loss = 0.0
+            for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                gen_rec_loss += self.rec_loss(f_q, f_k).mean()
+
+            # identity loss
+            tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
+            tar_s3 = self.map_net(tar_z3, tar_labels)
+            fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
+            if len(self.device_ids) > 1:
+                _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs2)
+                _, feat_k, _ = self.gen.module.forward_encoder(tar_imgs)
+            else:
+                _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+                _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+            feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+            feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+            gen_idt_loss = 0.0
+            for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                gen_idt_loss += self.rec_loss(f_q, f_k).mean()
 
             # total loss
-            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
+            gen_loss = self.config.lambda_adv *  gen_adv_loss +  self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * (gen_rec_loss + gen_idt_loss) - self.config.lambda_ds * gen_ds_loss
             gen_loss.backward()
             self.gen_optim.step()
-
-            # train D
-            self.set_requires_grad(self.disc, requires_grad=True)
-            disc_real_logits1, disc_real_logits2 = self.disc(DiffAugment(tar_imgs, policy=self.config.data_aug_policy))
-            disc_fake_logits1, disc_fake_logits2 = self.disc(DiffAugment(fake_tar_imgs.detach(), policy=self.config.data_aug_policy))
-
-            # compute loss
-            fake_tar_labels = torch.LongTensor(np.random.randint(0, 2, tar_imgs.size(0))).to(self.device)
-            disc_adv_loss = self.adv_loss(disc_real_logits1, real=True) + self.adv_loss(disc_fake_logits1, real=False)
-            disc_cls_loss = self.cls_loss(disc_real_logits2, tar_labels) + self.cls_loss(disc_real_logits2, fake_tar_labels)
-            disc_loss = self.config.lambda_adv * disc_adv_loss + self.config.lambda_cls * disc_cls_loss
-            disc_loss.backward()
-            self.disc_optim.step()
 
             # ============ log ============ #
             self.writer.set_step((epoch - 1) * len(self.train_dataloader) + batch_idx)
@@ -144,7 +170,6 @@ class StarCartoonTrainer(BaseTrainer):
             self.train_metrics.update('gen_cls', gen_cls_loss.item())
             self.train_metrics.update('gen_ds', gen_ds_loss.item())
             self.train_metrics.update('gen_rec', gen_rec_loss.item())
-
 
             if batch_idx % self.log_step == 0:
                 self.logger.info('Train Epoch: {:d} {:s} Disc. Loss: {:.4f} Gen. Loss {:.4f}'.format(
@@ -164,6 +189,7 @@ class StarCartoonTrainer(BaseTrainer):
         self.gen.eval()
         self.disc.eval()
         self.map_net.eval()
+        self.samp_net.eval()
 
         disc_losses = []
         disc_adv_losses = []
@@ -199,10 +225,36 @@ class StarCartoonTrainer(BaseTrainer):
                 gen_ds_loss = torch.mean(torch.abs(fake_tar_imgs - fake_tar_imgs2))
 
                 # content loss
-                gen_rec_loss = self.rec_loss(fake_tar_imgs, src_imgs)
+                if len(self.device_ids) > 1:
+                    _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs)
+                    _, feat_k, _ = self.gen.module.forward_encoder(src_imgs)
+                else:
+                    _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs)
+                    _, feat_k, _ = self.gen.forward_encoder(src_imgs)
+                feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+                feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+                gen_rec_loss = 0.0
+                for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                    gen_rec_loss += self.rec_loss(f_q, f_k).mean()
+
+                # identity loss
+                tar_z3 = torch.randn((batch_size, self.config.latent_size)).to(self.device)
+                tar_s3 = self.map_net(tar_z3, tar_labels)
+                fake_tar_imgs2 = self.gen(tar_imgs, tar_s3)
+                if len(self.device_ids) > 1:
+                    _, feat_q, _ = self.gen.module.forward_encoder(fake_tar_imgs2)
+                    _, feat_k, _ = self.gen.module.forward_encoder(tar_imgs)
+                else:
+                    _, feat_q, _ = self.gen.forward_encoder(fake_tar_imgs2)
+                    _, feat_k, _ = self.gen.forward_encoder(tar_imgs)
+                feat_k_pool, sample_ids = self.samp_net(feat_k, 128, None)
+                feat_q_pool, _ = self.samp_net(feat_q, 128, sample_ids)
+                gen_idt_loss = 0.0
+                for f_q, f_k in zip(feat_q_pool, feat_k_pool):
+                    gen_idt_loss += self.rec_loss(f_q, f_k).mean()
 
                 # total loss
-                gen_loss = self.config.lambda_adv *  gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * gen_rec_loss - self.config.lambda_ds * gen_ds_loss
+                gen_loss = self.config.lambda_adv * gen_adv_loss + self.config.lambda_cls * gen_cls_loss + self.config.lambda_rec * (gen_rec_loss + gen_idt_loss) - self.config.lambda_ds * gen_ds_loss
 
                 # train D
                 self.set_requires_grad(self.disc, requires_grad=True)
@@ -256,9 +308,10 @@ class StarCartoonTrainer(BaseTrainer):
                 self.device_ids) <= 1 else self.disc.module.state_dict(),
             'map_state_dict': self.map_net.state_dict() if len(
                 self.device_ids) <= 1 else self.map_net.module.state_dict(),
+            'samp_state_dict': self.samp_net.state_dict() if len(
+                self.device_ids) <= 1 else self.samp_net.module.state_dict(),
             'gen_optim': self.gen_optim.state_dict(),
             'disc_optim': self.disc_optim.state_dict(),
-            'map_optim': self.map_net_optim.state_dict()
         }
         filename = str(self.config.checkpoint_dir + 'current.pth')
         torch.save(state, filename)

@@ -106,7 +106,7 @@ class WhiteboxTrainer(BaseTrainer):
 
             # ============ Generation ============ #
             fake_tar_imgs = self.gen(src_imgs)
-            fake_tar_imgs = guided_filter(src_imgs, fake_tar_imgs, r=1)
+            fake_tar_imgs = 0.5 * guided_filter(src_imgs, fake_tar_imgs, r=1) + 0.5 * fake_tar_imgs
 
             # ============ train G ============ #
             self.set_requires_grad(self.disc_gray, requires_grad=False)

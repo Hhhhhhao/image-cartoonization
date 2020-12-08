@@ -94,16 +94,7 @@ class Generator(nn.Module):
             nn.Tanh())
 
     def forward(self, x):
-
-        out = self.conv_in(x)
-
-        down = []
-        for down_layer in self.down_layers:
-            out = down_layer(out)
-            down.append(out)
-        down = down[::-1]
-
-        out = self.res_layers(out)
+        out, down = self.forward_encoder(x)
 
         for i, up_layer in enumerate(self.up_layers):
             if self.skip_conn:
@@ -113,6 +104,18 @@ class Generator(nn.Module):
 
         out = self.conv_out(out)
         return out
+
+    def forward_encoder(self, x):
+        out = self.conv_in(x)
+
+        down = []
+        for down_layer in self.down_layers:
+            out = down_layer(out)
+            down.append(out)
+        down = down[::-1]
+
+        out = self.res_layers(out)
+        return out, down
 
 
 
@@ -172,7 +175,7 @@ class StarGenerator(nn.Module):
         res_layers = []
         for i in range(self.num_res):
             res_layers.append(ResConv(feat_dim, feat_dim, 3))
-        self.res_layers = nn.Sequential(*res_layers)
+        self.res_layers = nn.ModuleList(res_layers)
 
         # upsample layers
         self.up_layers = nn.ModuleList()
@@ -189,15 +192,7 @@ class StarGenerator(nn.Module):
 
     def forward(self, x, s):
 
-        out = self.conv_in(x)
-
-        down = []
-        for down_layer in self.down_layers:
-            out = down_layer(out)
-            down.append(out)
-        down = down[::-1]
-
-        out = self.res_layers(out)
+        out, _, down = self.forward_encoder(x)
 
         for i, up_layer in enumerate(self.up_layers):
             if self.skip_conn:
@@ -207,6 +202,22 @@ class StarGenerator(nn.Module):
 
         out = self.conv_out(out)
         return out
+
+    def forward_encoder(self, x):
+        out = self.conv_in(x)
+
+        feat_list = []
+        down = []
+        for i, down_layer in enumerate(self.down_layers):
+            out = down_layer(out)
+            down.append(out)
+            feat_list.append(out)
+        down = down[::-1]
+
+        for res_layer in self.res_layers:
+            out = res_layer(out)
+            feat_list.append(out)
+        return out, feat_list, down
 
 
 
