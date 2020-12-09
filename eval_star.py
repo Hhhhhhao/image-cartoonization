@@ -14,6 +14,7 @@ from kid_score import calculate_kid_given_paths
 from acc_score import compute_acc_score
 from utils.wb_utils import guided_filter
 
+
 def get_config(manual=None):
     parser = argparse.ArgumentParser('Image Cartoon')
     # basic options
