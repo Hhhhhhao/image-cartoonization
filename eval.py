@@ -99,24 +99,24 @@ def main():
     # calculate acc score
     results = compute_acc_score(
         '/'.join(image_dir.split('/')[:-1]),
-        '/home/haochen/Projects/image-cartoonization/experiments//classifier_color_translation_cutout_real_gongqijun_128_bs800_glr0.0001_dlr0.0002_wd0.0001_201209_105646/checkpoints/current.pth',
+        '/home/haochen/Projects/image-cartoonization/experiments/classifier_color_translation_cutout_real_gongqijun_128_bs256_glr0.001_dlr0.0002_wd0.0001_201209_034754/checkpoints/current.pth',
         config.tar_style,
         image_size)
-    line = 'Acc: %.6f \n' % (results)
+    line = 'Acc: %.4f (%.4f) \n' % (results[0], results[1])
     result_file.write(line)
     print(line)
 
     # calculate fid score
     results = calculate_fid_given_paths(['{}/{}_test.txt'.format(config.data_dir, config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
     for p, m, s in results:
-        line = 'FID (%s): %.2f (%.3f)\n' % (p, m, s)
+        line = 'FID (%s): %.4f (%.4f)\n' % (p, m, s)
         result_file.write(line)
         print(line)
 
     # calculate kid score
     results = calculate_kid_given_paths(['{}/{}_test.txt'.format(config.data_dir, config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')
     for p, m, s in results:
-        line = 'KID (%s): %.2f (%.3f)\n' % (p, m, s)
+        line = 'KID (%s): %.4f (%.4f)\n' % (p, m, s)
         result_file.write(line)
         print(line)
 

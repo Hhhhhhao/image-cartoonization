@@ -7,25 +7,9 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from models import ResNet
+from utils.metric import accuracy
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
-class AvgMeter():
-    def __init__(self):
-        self.qty = 0
-        self.cnt = 0
-
-    def update(self, increment, count):
-        self.qty += increment
-        self.cnt += count
-
-    def get_avg(self):
-        if self.cnt == 0:
-            return 0
-        else:
-            return self.qty/self.cnt
-
 
 def compute_acc_score(image_path, model_path, image_style, image_size=256, num_feature=1024, num_class=4):
 
@@ -42,8 +26,6 @@ def compute_acc_score(image_path, model_path, image_style, image_size=256, num_f
     model.to(device)
     model.eval()
 
-    acc_meter = AvgMeter()
-
     class_dict = {
         "disney": 0,
         "gongqijun": 1,
@@ -53,17 +35,18 @@ def compute_acc_score(image_path, model_path, image_style, image_size=256, num_f
     gt = class_dict[image_style]
     print("gt", gt)
 
+    acc_list = []
     with torch.no_grad():
         for i, (data, _) in enumerate(image_loader):
             data = data.to(device)
             pred = model(data)
+            target = torch.ones((data.size(0)), dtype=torch.long) * gt
+            target = target.to(device)
 
-            label = pred.argmax(1).eq(gt)
-            label = label.view(-1).float()
+            acc1 = accuracy(pred, target)[0]
+            acc_list.append(acc1.item())
 
-            acc_meter.update(np.sum(np.equal(label.cpu().numpy(), gt)), data.size(0))
-
-    return acc_meter.get_avg()
+    return np.mean(acc_list), np.std(acc_list)
 
 
 if __name__ == '__main__':
