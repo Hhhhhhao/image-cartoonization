@@ -11,13 +11,14 @@ import numpy as np
 import cv2
 from fid_score import calculate_fid_given_paths
 from kid_score import calculate_kid_given_paths
+from acc_score import compute_acc_score
 from utils.wb_utils import guided_filter
 
 def get_config(manual=None):
     parser = argparse.ArgumentParser('Image Cartoon')
     # basic options
     parser.add_argument('--checkpoint-path', default='experiments/cyclegan_color_translation_cutout_real_gongqijun_128_bs12_glr0.0001_dlr0.0002_wd0.0001_201106_025817/checkpoints/current.pth', help='checkpoint path')
-    parser.add_argument('--image-size', default='256', type=int, help='image size')
+    parser.add_argument('--image-size', default=128, type=int, help='image size')
     return parser.parse_args(manual)
 
 
@@ -71,8 +72,8 @@ def main():
             src_imgs = src_imgs.to(device)
             tar_imgs = model(src_imgs)
 
-            # if config.exp_name == 'whitebox':
-            #     tar_imgs = guided_filter(tar_imgs, src_imgs, r=1)
+            if config.exp_name == 'whitebox':
+                tar_imgs = guided_filter(tar_imgs, src_imgs, r=1)
 
             # save images
             tar_imgs = tar_imgs.cpu().numpy().transpose(0, 2, 3, 1)
@@ -93,8 +94,17 @@ def main():
     del model
     del data_loader
 
-
     result_file = open('{}/{}2_{}_result_{}_{}.txt'.format(result_dir, config.src_style, config.tar_style, image_size, checkpoint_epoch), "w")
+
+    # calculate acc score
+    results = compute_acc_score(
+        '/'.join(image_dir.split('/')[:-1]),
+        '/home/haochen/Projects/image-cartoonization/experiments//classifier_color_translation_cutout_real_gongqijun_128_bs800_glr0.0001_dlr0.0002_wd0.0001_201209_105646/checkpoints/current.pth',
+        config.tar_style,
+        image_size)
+    line = 'Acc: %.6f \n' % (results)
+    result_file.write(line)
+    print(line)
 
     # calculate fid score
     results = calculate_fid_given_paths(['{}/{}_test.txt'.format(config.data_dir, config.tar_style), image_dir], config.batch_size, torch.cuda.is_available(), 2048, model_type='inception')

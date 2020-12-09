@@ -1,4 +1,5 @@
 # experiments
+mid_experiments/*
 experiments/*
 
 # Byte-compiled / optimized / DLL files
@@ -127,3 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea/*
+classifier.pth
+classifier.pth
+classifier.pth

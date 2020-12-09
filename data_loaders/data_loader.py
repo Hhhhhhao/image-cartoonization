@@ -1,7 +1,7 @@
 from torchvision import transforms
 from base import BaseDataLoader
 from torch.utils.data import DataLoader
-from .datasets import CartoonDataset, CartoonGANDataset, CartoonDefaultDataset, StarCartoonDataset
+from .datasets import CartoonDataset, CartoonGANDataset, CartoonDefaultDataset, StarCartoonDataset, ClassifierDataset
 from torchvision.datasets import ImageFolder
 
 
@@ -115,14 +115,16 @@ class StarCartoonDataLoader(BaseDataLoader):
 
 
 class ClassifierDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
+    def __init__(self, data_dir, split, image_size=256, batch_size=16, num_workers=4, validation_split=0.01):
 
-        # data augmentation
-        src_transform = build_train_transform('real', image_size)
-        tar_transform = build_train_transform('cartoon', image_size)
+        transform = transforms.Compose([
+            transforms.RandomResizedCrop(image_size, scale=(0.5, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
         # create dataset
-        self.dataset = StarCartoonDataset(data_dir, src_transform, tar_transform)
+        self.dataset = ClassifierDataset(data_dir, split, transform)
 
         super(ClassifierDataLoader, self).__init__(
             dataset=self.dataset,
@@ -131,9 +133,6 @@ class ClassifierDataLoader(BaseDataLoader):
             validation_split=validation_split,
             num_workers=num_workers,
             drop_last=True)
-
-    def shuffle_dataset(self):
-        self.dataset._shuffle_data()
 
 
 if __name__ == '__main__':

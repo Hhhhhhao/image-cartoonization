@@ -166,57 +166,44 @@ class StarCartoonDataset(Dataset):
 
 
 class ClassifierDataset(Dataset):
-    def __init__(self, data_dir, src_transform=None, tar_transform=None):
+    def __init__(self, data_dir, split, transform=None):
         self.data_dir = data_dir
-        self.src_data, self.tar_data = self._load_data(data_dir)
-        self.src_transform = src_transform
-        self.tar_transform = tar_transform
+        self.data, self.labels = self._load_data(data_dir, split)
+        self.transform = transform
 
-    def _load_data(self, data_dir):
-        src_data = []
-        with open(os.path.join(data_dir, 'real_train.txt'), 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                path = line.strip()
-                src_data.append(path)
-
-        # styles = ['gongqijun', 'xinhaicheng']
+    def _load_data(self, data_dir, split):
         styles = ['disney', 'gongqijun','tangqian','xinhaicheng']
-        tar_data = {}
+        class_dict = {
+            "disney": 0,
+            "gongqijun": 1,
+            "tangqian": 2,
+            "xinhaicheng": 3,
+        }
+        data = []
+        labels = []
         for i, style in enumerate(styles):
-            tar_data[i] = []
-            with open(os.path.join(data_dir, '{}_train.txt'.format(style)), 'r') as f:
+            cls = class_dict[style]
+            with open(os.path.join(data_dir, '{}_{}.txt'.format(style, split)), 'r') as f:
                 lines = f.readlines()
                 for line in lines:
                     path = line.strip()
-                    tar_data[i].append(path)
-        return src_data, tar_data
-
-    def _shuffle_data(self):
-        for key, item in self.tar_data.items():
-            np.random.shuffle(item)
-            self.tar_data[key] = item
+                    data.append(path)
+                    labels.append(int(cls))
+        return data, labels
 
     def __len__(self):
-        return len(self.src_data)
+        return len(self.data)
 
     def __getitem__(self, index):
-        # sample a target
-        tar_label = random.randint(0, 3)
-        src_path = self.src_data[index]
-        tar_path = self.tar_data[tar_label][index]
-        src_img = Image.open(os.path.join(self.data_dir, src_path))
-        tar_img = Image.open(os.path.join(self.data_dir, tar_path))
-        src_img = src_img.convert('RGB')
-        tar_img = tar_img.convert('RGB')
+        path = self.data[index]
+        label = np.asarray(self.labels[index], dtype=np.int64)
+        img = Image.open(os.path.join(self.data_dir, path))
+        img = img.convert('RGB')
 
-        if self.src_transform:
-            src_img = self.src_transform(src_img)
+        if self.transform:
+            img = self.transform(img)
 
-        if self.tar_transform:
-            tar_img = self.tar_transform(tar_img)
-
-        return src_img, tar_img, tar_label
+        return img, label
 
 
 if __name__ == '__main__':

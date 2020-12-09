@@ -8,13 +8,14 @@ from data_loaders import ClassifierDataLoader
 from utils import MetricTracker
 import torch.nn as nn
 
+
 class ClassifierTrainer(BaseTrainer):
     def __init__(self, config):
         super(ClassifierTrainer, self).__init__(config)
 
         self.logger.info("Creating data loaders...")
         self.train_dataloader, self.valid_dataloader = self._build_dataloader()
-        self.log_step = int(np.sqrt(self.train_dataloader.batch_size))*20
+        self.log_step = int(np.sqrt(self.train_dataloader.batch_size))
 
         self.logger.info("Creating model architecture...")
         resnet = self._build_model()
@@ -39,10 +40,16 @@ class ClassifierTrainer(BaseTrainer):
     def _build_dataloader(self):
         train_dataloader = ClassifierDataLoader(
             data_dir=self.config.data_dir,
+            split='train',
             batch_size=self.config.batch_size,
             image_size=self.config.image_size,
             num_workers=self.config.num_workers)
-        valid_dataloader = train_dataloader.split_validation()
+        valid_dataloader = ClassifierDataLoader(
+            data_dir=self.config.data_dir,
+            split='test',
+            batch_size=self.config.batch_size,
+            image_size=self.config.image_size,
+            num_workers=self.config.num_workers)
         return train_dataloader, valid_dataloader
 
     def _build_model(self):
@@ -59,6 +66,7 @@ class ClassifierTrainer(BaseTrainer):
             lr=self.config.g_lr,
             weight_decay=self.config.weight_decay,
             betas=(0.5, 0.999))
+        self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[10, 15, 20])
         return optim
 
     def _build_criterion(self):
@@ -83,7 +91,7 @@ class ClassifierTrainer(BaseTrainer):
         self.resnet.train()
         self.train_metrics.reset()
 
-        for batch_idx, (src, img, label) in enumerate(self.train_dataloader):
+        for batch_idx, (img, label) in enumerate(self.train_dataloader):
             img, label = img.to(self.device), label.to(self.device)
             self.optim.zero_grad()
 
@@ -112,11 +120,10 @@ class ClassifierTrainer(BaseTrainer):
                     loss.item(),
                     torch.div(torch.sum(acc), label.size(0))))
 
+        self.lr_scheduler.step()
         log = self.train_metrics.result()
         val_log = self._valid_epoch(epoch)
         log.update(**{'val_'+k : v for k, v in val_log.items()})
-        # shuffle data loader
-        self.train_dataloader.shuffle_dataset()
         return log
 
     def _valid_epoch(self, epoch):
@@ -132,7 +139,7 @@ class ClassifierTrainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
 
-            for batch_idx, (src, img, label) in enumerate(self.valid_dataloader):
+            for batch_idx, (img, label) in enumerate(self.valid_dataloader):
                 img, label = img.to(self.device), label.to(self.device)
 
                 # TODO similar to train but not optimizer.step()

@@ -8,9 +8,8 @@ from torchvision.datasets import ImageFolder
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from models import ResNet
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = 'cpu'
 
 class AvgMeter():
     def __init__(self):
@@ -32,12 +31,11 @@ def compute_acc_score(image_path, model_path, image_style, image_size=256, num_f
 
     transform = transforms.Compose([
             transforms.Resize(image_size),
-            transforms.CenterCrop(image_size),
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
     image_data = ImageFolder(image_path, transform=transform)
-    image_loader = DataLoader(image_data, batch_size=1, drop_last=False, pin_memory=True, shuffle=False)
+    image_loader = DataLoader(image_data, batch_size=32, drop_last=False, pin_memory=True, shuffle=False)
 
     model = ResNet(num_feature, num_class)
     model.load_state_dict(torch.load(model_path)['resnet_state_dict'])
@@ -53,41 +51,36 @@ def compute_acc_score(image_path, model_path, image_style, image_size=256, num_f
         "xinhaicheng": 3,
     }
     gt = class_dict[image_style]
-    # gt.to(device)
+    print("gt", gt)
 
     with torch.no_grad():
         for i, (data, _) in enumerate(image_loader):
-            data.to(device)
+            data = data.to(device)
             pred = model(data)
 
             label = pred.argmax(1).eq(gt)
             label = label.view(-1).float()
 
-            # print(label)
-            # print(gt)
-            # print(np.sum(np.equal(label.cpu().numpy(), gt)))
-            # raise Exception('stop')
-            acc_meter.update(np.sum(np.equal(label.cpu().numpy(), gt)), 1)
+            acc_meter.update(np.sum(np.equal(label.cpu().numpy(), gt)), data.size(0))
 
     return acc_meter.get_avg()
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+    parser = ArgumentParser()
     
     parser.add_argument('--image-path', type=str, required=True,
                         help='path to image folder')
-    parser.add_argument('--model-path', type=str, required=True,
+    parser.add_argument('--model-path', type=str, default='experiments',
                         help='path to model')
-    parser.add_argument('--image-size', type=int, default=256,
+    parser.add_argument('--image-size', type=int, default=224,
                         help='resized image size')
     parser.add_argument('--image-style', type=str, required=True,
-                        help='verification image style') # plz choose from ['disney', 'gongqijun', 'tangqian', 'xinhaicheng']
+                        help='verification image style')
     parser.add_argument('--num-feature', type=int, default=1024,
                         help='num of features for resnet linear')
     parser.add_argument('--num-class', type=int, default=4,
                         help='num of classes for resnet output')
-
     parser.add_argument('--verif-model', type=str, required=True,
                         help='model name where generate cartoon images')
 
