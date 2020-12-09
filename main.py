@@ -13,7 +13,7 @@ def init_config():
     parser.add_argument('--n-gpu', default=1, type=int, help='number of gpus to use')
     parser.add_argument('--tensorboard', default=False, action='store_true', help='use tensorboard to log results')
     parser.add_argument('--num-workers', default=4, type=int, help='number of workers in data loaders')
-    parser.add_argument('--save-period', default=1, type=int, help='saving period for models')
+    parser.add_argument('--save-period', default=11, type=int, help='saving period for models')
     parser.add_argument('--resume', default=None, help='resume checkpoint path')
 
     # train options
