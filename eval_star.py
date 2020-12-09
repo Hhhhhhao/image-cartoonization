@@ -105,7 +105,7 @@ def main():
         # calculate acc score
         results = compute_acc_score(
             '/'.join(image_dir.split('/')[:-1]),
-            '/home/ubuntu/haoc/image-cartoonization/experiments/classifier_color_translation_cutout_real_gongqijun_128_bs256_glr0.001_dlr0.0002_wd0.0001_201209_034754/checkpoints/current.pth',
+            '/home/ubuntu/haoc/image-cartoonization/experiments/classifier_color_translation_cutout_real_gongqijun_128_bs128_glr0.001_dlr0.0002_wd0.0001_201209_034822/checkpoints/current.pth',
             tar_style,
             image_size)
         line = 'Acc: %.4f (%.4f) \n' % (results[0], results[1])
