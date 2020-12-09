@@ -5,7 +5,7 @@ import torch
 from easydict import EasyDict as edict
 from tqdm import tqdm
 from data_loaders import CartoonDefaultDataLoader
-from models import Generator, MappingNetwork
+from models import StarGenerator, MappingNetwork
 from utils.misc import read_json
 import numpy as np
 import cv2
@@ -52,7 +52,7 @@ def main():
         num_workers=config.num_workers)
 
     # build model
-    model = Generator(config.image_size, config.down_size, config.num_res, config.skip_conn)
+    model = StarGenerator(config.image_size, config.down_size, config.num_res, config.skip_conn)
     mapnet  = MappingNetwork(latent_dim=16, style_dim=config.style_size, num_domains=4)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['gen_state_dict'])
@@ -105,7 +105,7 @@ def main():
         # calculate acc score
         results = compute_acc_score(
             '/'.join(image_dir.split('/')[:-1]),
-            '/home/haochen/Projects/image-cartoonization/experiments/classifier_color_translation_cutout_real_gongqijun_128_bs256_glr0.001_dlr0.0002_wd0.0001_201209_034754/checkpoints/current.pth',
+            '/home/ubuntu/haoc/image-cartoonization/experiments/classifier_color_translation_cutout_real_gongqijun_128_bs256_glr0.001_dlr0.0002_wd0.0001_201209_034754/checkpoints/current.pth',
             tar_style,
             image_size)
         line = 'Acc: %.4f (%.4f) \n' % (results[0], results[1])
