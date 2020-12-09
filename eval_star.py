@@ -95,9 +95,6 @@ def main():
                     cv2.imwrite(os.path.join(image_dir, '{}_src.png'.format(count)), src_img[:, :, ::-1])
                     count += 1
 
-        del model
-        del data_loader
-
         result_file = open('{}/{}2_{}_result_{}_{}.txt'.format(result_dir, config.src_style, tar_style, image_size, checkpoint_epoch), "w")
 
         result_file.write("Style {}\n".format(tar_style))
